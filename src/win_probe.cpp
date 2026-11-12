@@ -100,22 +100,39 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
                result.image_size-it->second.rva>=sizeof(void*)) {
                 const auto base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
                 const auto location=reinterpret_cast<const void*>(base+it->second.rva);
-                std::uintptr_t singleton=0;
-                SIZE_T read=0;
-                if(ReadProcessMemory(GetCurrentProcess(),location,&singleton,sizeof(singleton),&read) &&
-                   read==sizeof(singleton)) {
+                // ASI bootstrap can run before the game's resource loader is
+                // initialized. Sample the validated global pointer a few times
+                // on this background worker thread, with a fixed 15s deadline.
+                // No game API calls, object dereferences, or memory writes.
+                constexpr std::array<unsigned,4> kSampleTimesMs={0,3000,8000,15000};
+                log << "ResourceLoader: checking startup initialization at +0,+3,+8,+15 seconds\n";
+                log.flush();
+                for(std::size_t attempt=0;attempt<kSampleTimesMs.size();++attempt) {
+                    if(attempt>0)
+                        Sleep(kSampleTimesMs[attempt]-kSampleTimesMs[attempt-1]);
+                    std::uintptr_t singleton=0;
+                    SIZE_T read=0;
+                    if(!ReadProcessMemory(GetCurrentProcess(),location,&singleton,sizeof(singleton),&read) ||
+                       read!=sizeof(singleton)) {
+                        log << "ResourceLoader sample +" << kSampleTimesMs[attempt]/1000
+                            << "s: safe read failed\n";
+                        log.flush();
+                        break;
+                    }
                     MEMORY_BASIC_INFORMATION info{};
                     bool plausible=false;
-                    if(singleton>=0x10000 && VirtualQuery(reinterpret_cast<void*>(singleton),&info,sizeof(info))==sizeof(info)) {
+                    if(singleton>=0x10000 &&
+                       VirtualQuery(reinterpret_cast<const void*>(singleton),&info,sizeof(info))==sizeof(info)) {
                         const auto protection=info.Protect & 0xff;
                         plausible=info.State==MEM_COMMIT && !(info.Protect & PAGE_GUARD) &&
                             protection!=PAGE_NOACCESS;
                     }
-                    log << "ResourceLoader singleton: "
-                        << (singleton==0 ? "null/not initialized" : plausible ? "pointer present (not dereferenced)" : "unverified pointer")
-                        << "\n";
-                } else {
-                    log << "ResourceLoader singleton: safe read failed\n";
+                    const char* status=singleton==0 ? "null/not initialized" :
+                        plausible ? "pointer present (not dereferenced)" : "unverified pointer";
+                    log << "ResourceLoader sample +" << kSampleTimesMs[attempt]/1000
+                        << "s: " << status << "\n";
+                    log.flush();
+                    if(plausible) break;
                 }
             } else {
                 log << "ResourceLoader singleton: no validated data-segment symbol\n";
