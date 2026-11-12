@@ -68,7 +68,7 @@ int main() {
     if(result.status!=State::EmptyStyles || !result.found_token ||
        result.styles!=0 || result.style_capacity!=1)return 1;
     mem.put(resource,0x4c,1u);
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.UnmappedProbe");
     if(result.status!=State::StyleAvailable || result.found_property)return 1;
     mem.put(index,static_cast<std::size_t>(hash%8)*4,UINT32_MAX);
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
