@@ -1,44 +1,41 @@
 # DreamUI
 
-**Free, open-source theme framework for Cyberpunk 2077's existing UI.**
+Free, open-source theme framework for Cyberpunk 2077's **existing** UI.
 
-DreamUI aims to improve the readability and appearance of the *native* game HUD, inventory, looting, minimap, world map, notifications and menus, without introducing a replacement widget framework.
+**Status: pre-alpha native theme preflight. It does not recolor the game yet.**
 
-> **Status: experimental native bootstrap (v0.1.0 prototype). Not an in-game recolor mod yet.** No game UI hooks are currently implemented, and no release is considered ready for players.
+DreamUI aims to improve the game's own HUD, maps, item colors, notifications and backgrounds, without rendering a parallel UI.
 
-## Project goals
+## Goals
 
-- A single self-contained installation; no separately downloaded scripting framework.
-- Existing game UI widgets and marker resources, not custom UI overlays.
-- User themes packaged as portable, verifiable `.dream` files.
-- Distinct semantic colors for hostiles, friendly markers, loot rarity, selected controls, disabled labels and warnings.
-- Optional backgrounds and world-map themes without premium restrictions.
-- Free and open-source code, community-contributed themes, and NextGuide documentation.
+- One self-contained installation once the native adapter and installer are ready.
+- No custom widget framework or premium theme features.
+- Portable, validated .dream theme packages.
+- Semantic colors for primary/secondary text, hostile/friendly markers, loot rarity and selections.
+- MIT-licensed, independently authored implementation.
 
-## Current working components
+## Implemented
 
-- Dependency-free Python packer that validates and produces deterministic `.dream` theme archives.
-- Dependency-free C++ ZIP reader with CRC, bounds and path checks, plus a Windows x64 ASI startup/logging prototype.
-- A CI workflow compiling the `.asi` and running native/package-format tests.
+- Dependency-free Python .dream packer and C++ ZIP reader with CRC/path validation.
+- ASI startup (confirmed working in Cyberpunk 2.5 for alpha.1).
+- Native validation of JSON manifest, semantic #RRGGBB tokens and candidate vanilla Ink binding names.
+- Tested injectable InkColorWriter interface and reversible color session, with an in-memory mock writer.
+- Windows x64 builds, tests and prerelease workflow.
 
-The ASI startup and in-game behavior **must be tested on Cyberpunk 2.5**. The ZIP archive and Windows loader logic are not evidence that UI recoloring works.
+**No native game Ink resource accessor or write hooks are implemented yet.** RED4ext.SDK's default resolver needs RED4ext; DreamUI will not call it without an independently verified resolver. See docs/INK_INTEGRATION.md.
 
-## Build
+## Windows build
 
-Use Python 3 and CMake 3.23+ with a Windows MSVC toolchain for the ASI:
-
-```powershell
+~~~powershell
 python -m unittest discover -s tests -p 'test_*.py' -v
 python tools/dreamtool.py pack themes/Default dist/Default.dream
 cmake -S . -B build -A x64 -DBUILD_TESTING=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
-```
+~~~
 
-The artifact contains `DreamUI.asi` and `Default.dream`, **not** an all-in-one installer. During the prototype, an ASI loader is required (e.g. Ultimate ASI Loader); do not replace an existing game `version.dll`.
+Test ZIP needs an existing compatible ASI loader at present. Never overwrite a working version.dll. See docs/TESTING.md.
 
-See [architecture and known limitations](docs/ARCHITECTURE.md). Docs site planned with NextGuide when the native integration is ready.
+## Licensing
 
-## Third-party code and licensing
-
-DreamUI does not embed HUD Painter, paid background packs, Codeware, RED4ext or redscript code. References to existing mods are for compatibility/resource investigation only. See the MIT [LICENSE](LICENSE) for DreamUI-authored code.
+DreamUI is MIT licensed. It does not embed HUD Painter code, paid menu assets, Codeware, RED4ext, redscript or other independently installed mod frameworks.

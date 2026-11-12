@@ -1,24 +1,26 @@
-# DreamUI pre-alpha — native startup test ONLY
+# DreamUI v0.1.0-alpha.2 — native theme preflight
 
-This prerelease is **not a functional HUD or UI recolor mod**. It verifies whether an early DreamUI Windows ASI prototype can load and detect valid `.dream` archives. No Ink hooks, color overrides, map-marker changes or custom backgrounds are implemented yet.
+This is an experimental native runtime test, **not a HUD recolor mod**. It checks a .dream manifest, parses RGB token values, and logs proposed vanilla Ink bindings.
 
-## Test on Cyberpunk 2077 2.5 (Windows x64)
+## Installation and test
 
-1. Make a backup of your game directory and saves before testing native mods.
-2. A compatible ASI loader must already be installed. **Do not replace an existing `version.dll`** just for DreamUI.
-3. Extract the test ZIP into the Cyberpunk 2077 game directory. It contains `bin/x64/plugins/DreamUI.asi` and `dreamui/themes/Default.dream`.
-4. Launch the game normally, then quit. The game should look unchanged.
-5. Check `Cyberpunk 2077/dreamui/logs/DreamUI.log` for the native startup line and a recognized `Default.dream` archive.
+1. Back up your modded game setup.
+2. Use your existing compatible ASI loader. **Do not replace version.dll.**
+3. Extract the release ZIP into the Cyberpunk 2077 game folder; it contains bin/x64/plugins/DreamUI.asi and dreamui/themes/Default.dream.
+4. Launch Cyberpunk 2077 2.5 and exit. The UI should look unchanged.
+5. Inspect dreamui/logs/DreamUI.log for:
+   - DreamUI alpha.2 native theme preflight
+   - Validated theme dreamui.default version 0.1.0
+   - Candidate Ink mapping text.primary -> MainColors.PanelWhite
+   - Theme preflight completed: 1 valid theme(s)
+   - Ink resource adapter not yet verified; no game patches applied
 
-If there is no log, the ASI may not have loaded (or your current loader uses a different location). If you see a crash or incompatibility, remove `DreamUI.asi` and the `dreamui` directory, and report your game version, launcher and existing loaders.
+If the game crashes, remove DreamUI.asi and report the ASI loader and game version.
 
-## Limitations
+## Changes from alpha.1
 
-- The test ZIP does **not** bundle an ASI loader yet; a one-ZIP self-contained installer is a future goal.
-- The runtime ZIP reader currently accepts **only uncompressed ZIP_STORED** members and validates ZIP CRCs; `.dream` authors should use the included Python packer.
-- In-game UI and Ink styling have not been tested or implemented.
-- No paid or proprietary mod files are included.
+- Native JSON schema and RGB token validation, not just a ZIP member count.
+- Four explicit candidate Ink binding paths.
+- Mock-tested reversible color apply/restore interface.
 
-## Contributing
-
-Please attach your log and reproduction details to a GitHub issue when Issues are enabled. Never upload game executables, save files containing personal information, or purchased mod assets.
+The native game color adapter is not implemented; the release intentionally performs no memory writes or UI changes. No paid assets or extra scripting frameworks are bundled.
