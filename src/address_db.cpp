@@ -4,6 +4,7 @@
 #include <charconv>
 #include <fstream>
 #include <optional>
+#include <vector>
 
 namespace dreamui {
 namespace {
@@ -79,7 +80,8 @@ AddressDbResult read_address_database(const std::filesystem::path& path,
     file.clear();file.seekg(0);
     std::string buffer;
     buffer.reserve(1024*1024+16384);
-    std::array<char,1024*1024> chunk{};
+    // Use heap storage: Windows ASI worker threads have a 1 MiB default stack.
+    std::vector<char> chunk(1024*1024);
     while(file){
         file.read(chunk.data(),chunk.size());
         const auto count=file.gcount();
