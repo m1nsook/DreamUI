@@ -1,0 +1,32 @@
+{
+  "text": {
+    "primary": "#EAF0F2",
+    "secondary": "#A1ADB3",
+    "muted": "#66747B",
+    "disabled": "#424C52"
+  },
+  "selection": {
+    "active": "#F6BA69",
+    "inactive": "#6A747C"
+  },
+  "feedback": {
+    "warning": "#EFAD62",
+    "danger": "#F46970",
+    "success": "#9FD6BC"
+  },
+  "map": {
+    "enemy": "#F46970",
+    "friendly": "#9FD6BC",
+    "neutral": "#D5E1E7",
+    "objective": "#F6BA69",
+    "road": "#AFC4CE",
+    "building": "#343B42"
+  },
+  "loot": {
+    "common": "#C4CDD0",
+    "uncommon": "#A5D6AF",
+    "rare": "#77C3E3",
+    "epic": "#BF92E5",
+    "legendary": "#F4BA65"
+  }
+}
