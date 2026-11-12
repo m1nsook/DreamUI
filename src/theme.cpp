@@ -245,9 +245,8 @@ const std::vector<InkBinding>& candidate_ink_bindings() {
     // Names are vanilla Ink style resource/property names. They must be
     // independently checked at runtime before an engine-backed writer is enabled.
     static const std::vector<InkBinding> bindings = {
-        {"text.primary","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.PanelWhite"},
-        {"text.secondary","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.Grey"},
-        {"text.disabled","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.DarkGrey"},
+        {"text.primary","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.Red"},
+        {"text.secondary","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.PanelBlue"},
         {"selection.active","base\\gameplay\\gui\\common\\main_colors.inkstyle","MainColors.ActiveYellow"}
     };
     return bindings;
@@ -265,12 +264,14 @@ bool InkColorSession::apply(const Theme& theme, InkColorWriter& writer, std::str
             restore();
             return false;
         }
+        // Save before writing. A writer may modify the engine resource and
+        // still return failure, so rollback must include the current property.
+        originals_.push_back({binding, original});
         if (!writer.write(binding.resource, binding.property, it->second)) {
             error = "failed to write Ink value: " + std::string(binding.property);
             restore();
             return false;
         }
-        originals_.push_back({binding, original});
     }
     writer_ = originals_.empty() ? nullptr : &writer;
     return true;

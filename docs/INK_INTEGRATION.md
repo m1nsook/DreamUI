@@ -1,43 +1,38 @@
-# Native Ink integration — alpha.2
+# Native Ink integration — evidence and status
 
-## Current scope
+DreamUI intends to recolor **Cyberpunk's native Ink resources**, without introducing HTML/CSS, an overlay or a mandatory externally installed scripting framework.
 
-Alpha.1 log confirmed ASI startup and ZIP reading. Alpha.2 introduces native theme manifest and semantic color parsing, candidate mappings for native Ink style properties, and a mock-tested apply/restore session.
+## Confirmed behavior from HUD Painter 1.4.1
 
-The game-facing Ink color writer remains **unimplemented**. These mappings do not imply that patches have been made in Cyberpunk's runtime.
+After examining the actual supplied HUD Painter, RedFileSystem and RedData archives, the native resources are handled through **Resource/Loaded and Resource/Ready lifecycle callbacks**. HUD Painter caches the existing style array, changes selected inkStyleProperty Variant values to typed HDRColor, and calls RefreshResource on preset refresh. FileSystem and JSON dependencies only handle preset persistence.
 
-## Independent address resolution
+See [source-level findings](HUD_PAINTER_REFERENCE.md) for exact source file names, line ranges and the distinction between palette resources, minimap bindings, world-map materials and menu entries.
 
-RED4ext.SDK can describe native engine structures, but its default UniversalReloc resolver calls RED4ext.dll and RED4ext_ResolveAddress. Without RED4ext, it can terminate the game process. DreamUI must not call that path until its own address resolver has been independently implemented and verified against the game executable.
+## DreamUI alpha.8 status
 
-Reference: https://github.com/wopss/RED4ext.SDK/blob/master/include/RED4ext/Relocation-inl.hpp
+The independent Windows ASI loads, validates .dream packages and responds to on-demand Tab diagnostics with no RED4ext installation required by DreamUI itself. In the owner's real game, it located the target cache entry with 7,298 cached tokens; the read-only inspector found **0 styles, 10 themes, and 2 overrides**. These are useful structure observations, NOT a successfully read Ink color, working resource adapter, or a patch.
 
-## Initial candidate bindings
+The old fixed-time probes and repeated version-only diagnostic releases are no longer the preferred workflow.
 
-Resource: base\gameplay\gui\common\main_colors.inkstyle
+## Corrected palette targets
 
-| Theme semantic token | Vanilla style property |
-| --- | --- |
-| text.primary | MainColors.PanelWhite |
-| text.secondary | MainColors.Grey |
-| text.disabled | MainColors.DarkGrey |
-| selection.active | MainColors.ActiveYellow |
+Initial candidate mappings to investigate, grounded by the official HUD Painter resource guide:
 
-These are existing Ink style property names, identified from a vanilla-style color list, not validated native runtime hooks. The project contains independently authored code, no HUD Painter source or paid assets.
+| DreamUI semantic purpose | Documented game palette property | Evidence |
+| --- | --- | --- |
+| Primary text, headers and main menu | MainColors.Red | Main and pause menus, headings, primary text |
+| Secondary text and icons | MainColors.PanelBlue | Secondary labels and icons |
+| Subdued labels | MainColors.Grey | Settings, quickhack and journal text |
+| Selection/accent | MainColors.ActiveYellow | Launch highlight text and active UI accents |
 
-## Next native adapter milestone
+The earlier mapping of primary text to MainColors.PanelWhite was a poor proof target: the documentation marks it W.I.P. MainColors.DarkGrey is documented for locked cyberware outlines rather than general disabled text; treat that binding as **unverified**.
 
-- Detect game executable version and fail closed on unknown builds.
-- Resolve engine functions independently of RED4ext at runtime, using verified versioned signatures only.
-- Read the actual vanilla Ink resource and capture its original value.
-- Validate native thread scheduling and resource refresh requirements before any modification.
-- Apply exactly one reversible override with tests for failed patching and reset/reload.
-- Test in-game with and without other UI mods.
+Reference: https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/main/modding-guides/hud-painter-resource.md
 
-## Current alpha.3 state
+## Next implementation checkpoint
 
-The executable metadata probe reports file version, PE timestamp, image size and presence of selected literal strings in the **on-disk** image. It does **not** locate RTTI objects, memory addresses, or live Ink resources. Verified runtime resource access and first live vanilla color read remain the next core milestone.
+No more in-game diagnosis based solely on timeouts or the presence of a style-file name. Implement and unit-test an independent game-native resource event/load bridge, validate the actual loaded inkStyleResource and HDRColor Variant, then demonstrate one reversible MainColors.Red change. Game lifecycle and main-thread constraints must be verified before any engine method calls. A compatible ASI loader remains required to load DreamUI.asi.
 
-## Alpha.6 cache inspection
+## Dependencies and licensing
 
-A gated, read-only ResourceLoader token-map inspector tests whether the native `main_colors.inkstyle` resource is already cached. It may inspect the style count and produce **unverified** inline RGBA candidates; it never calls game functions or patches memory. See [cache reader design](INK_CACHE.md).
+RED4ext.SDK headers and third-party scripts are useful research references, but RED4ext's default UniversalReloc requires RED4ext.dll. Do not redistribute HUD Painter's scripts, compiled archive, native dependencies or paid assets as DreamUI. All DreamUI implementation must be independently authored, and fallback must safely disable changes on unsupported game builds.

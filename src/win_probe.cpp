@@ -163,7 +163,7 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
         };
         const auto style = inspect_ink_cache(reader, singleton,
             R"(base\gameplay\gui\common\main_colors.inkstyle)",
-            "MainColors.PanelWhite");
+            "MainColors.Red");
         log << "Ink style: " << style.reason
             << " | cached_tokens=" << style.cached_tokens
             << " styles=" << style.styles
@@ -174,7 +174,7 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
             << " imports=" << style.imports << "\n";
         if (style.status == InkCacheProbe::Status::PropertyCandidate) {
             log << std::fixed << std::setprecision(5)
-                << "MainColors.PanelWhite candidate RGBA (RTTI not verified): "
+                << "MainColors.Red candidate RGBA (RTTI not verified): "
                 << style.rgba[0] << ", " << style.rgba[1] << ", "
                 << style.rgba[2] << ", " << style.rgba[3] << "\n";
             log.unsetf(std::ios::floatfield);

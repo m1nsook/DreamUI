@@ -53,41 +53,41 @@ int main() {
     mem.put(resource,0x30,key);mem.put(resource,0x40,styles);
     mem.put(resource,0x48,1u);mem.put(resource,0x4c,1u);
     mem.put(styles,0x10,props);mem.put(styles,0x18,1u);mem.put(styles,0x1c,1u);
-    mem.put(props,0,dreamui::cname_hash("MainColors.PanelWhite"));
+    mem.put(props,0,dreamui::cname_hash("MainColors.Red"));
     mem.put(props,8,static_cast<std::uint64_t>(0x900001));
     float floats[4]={0.8f,0.9f,1.0f,1.0f};
     mem.copy(props,16,floats,sizeof floats);
     const auto reader=[&](auto a,void* out,auto n){return mem.read(a,out,n);};
     using State=dreamui::InkCacheProbe::Status;
-    auto result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    auto result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::PropertyCandidate || !result.found_token ||
        !result.found_property || result.styles!=1 ||result.properties!=1 ||
        result.rgba[0]!=0.8f){std::cerr<<"expected property candidate: "<<result.reason<<'\n';return 1;}
     mem.put(resource,0x4c,0u);
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::EmptyStyles || !result.found_token ||
        result.styles!=0 || result.style_capacity!=1)return 1;
     mem.put(resource,0x4c,1u);
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::StyleAvailable || result.found_property)return 1;
     mem.put(index,static_cast<std::size_t>(hash%8)*4,UINT32_MAX);
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::NotCached)return 1;
     mem.put(index,static_cast<std::size_t>(hash%8)*4,0u);
     mem.put(refs,0,0u);
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::ExpiredToken)return 1;
     mem.put(refs,0,1u);
     mem.put(token,0x48,key+1);
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::Invalid)return 1;
     mem.put(token,0x48,key);
     mem.put(resource,0x5c,2000u); // reject implausible auxiliary Ink array
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::Invalid)return 1;
     mem.put(resource,0x5c,0u);
     mem.put(loader,12,0u); // invalid map capacity
-    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::Invalid)return 1;
     std::cout<<"Ink cached resource, candidate color, missing and corrupted map tests pass\n";
 }

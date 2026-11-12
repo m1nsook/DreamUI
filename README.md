@@ -30,7 +30,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 
 Actual engine resource handles, Ink reading/writing, theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
 
-See [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
+See [HUD Painter source research](docs/HUD_PAINTER_REFERENCE.md), [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
 
 ## Build
 
