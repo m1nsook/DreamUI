@@ -2,7 +2,7 @@
 
 Free, open-source theme framework for Cyberpunk 2077's **existing** UI.
 
-**Status: v0.1.0-alpha.5 — deferred native ResourceLoader pointer sampling. Not a HUD recoloring mod yet.**
+**Status: v0.1.0-alpha.6 — read-only native cached Ink style inspection. Not a HUD recoloring mod yet.**
 
 DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item rarity, looting and menus without introducing a separate widget framework.
 
@@ -21,7 +21,8 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible apply/restore logic.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
-- Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads a native singleton pointer at up to four startup intervals without invoking game functions.
+- Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
+- Read-only cached vanilla Ink style lookup (version-gated) with mock-tested token-map and property-memory reader; no style writes.
 - Native DreamCatalog model for listing installed themes, version display and choosing a fallback active theme; **no menu widget yet**.
 - GitHub Actions tests and Windows x64 prereleases.
 
@@ -29,7 +30,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 
 Actual engine resource handles, Ink reading/writing, theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
 
-See [alpha.5 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
+See [alpha.6 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
 
 ## Build
 

@@ -37,3 +37,7 @@ These are existing Ink style property names, identified from a vanilla-style col
 ## Current alpha.3 state
 
 The executable metadata probe reports file version, PE timestamp, image size and presence of selected literal strings in the **on-disk** image. It does **not** locate RTTI objects, memory addresses, or live Ink resources. Verified runtime resource access and first live vanilla color read remain the next core milestone.
+
+## Alpha.6 cache inspection
+
+A gated, read-only ResourceLoader token-map inspector tests whether the native `main_colors.inkstyle` resource is already cached. It may inspect the style count and produce **unverified** inline RGBA candidates; it never calls game functions or patches memory. See [cache reader design](INK_CACHE.md).
