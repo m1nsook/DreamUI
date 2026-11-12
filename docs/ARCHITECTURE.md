@@ -30,3 +30,7 @@ Theme values are **semantic intentions**, not claims that game color overrides e
 ## Source/license boundary
 
 References such as HUD Painter and paid menu-background mods are for behavior/resource research. DreamUI must not redistribute their code, art, or paid assets without explicit permission. Public MIT-licensed SDKs can be used under their license terms.
+
+## Alpha.3 read-only native probe and Dream Manager model
+
+Alpha.3 reads the Windows game executable file from disk to log PE/VersionInfo metadata. It never scans live game memory or patches Ink. It also builds an ordered DreamCatalog model from validated themes for a future native main-menu tile. See [engine diagnostics](ENGINE_PROBE.md) and [control hub specification](CONTROL_HUB.md).

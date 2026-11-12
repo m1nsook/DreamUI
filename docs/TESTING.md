@@ -1,26 +1,36 @@
-# DreamUI v0.1.0-alpha.2 — native theme preflight
+# DreamUI v0.1.0-alpha.3 — read-only engine probe and theme catalog
 
-This is an experimental native runtime test, **not a HUD recolor mod**. It checks a .dream manifest, parses RGB token values, and logs proposed vanilla Ink bindings.
+**Experimental test build — not a HUD recoloring mod.** It does not modify game memory, change colors or display DreamUI's main-menu tile.
 
-## Installation and test
+## Installation
 
-1. Back up your modded game setup.
-2. Use your existing compatible ASI loader. **Do not replace version.dll.**
-3. Extract the release ZIP into the Cyberpunk 2077 game folder; it contains bin/x64/plugins/DreamUI.asi and dreamui/themes/Default.dream.
-4. Launch Cyberpunk 2077 2.5 and exit. The UI should look unchanged.
-5. Inspect dreamui/logs/DreamUI.log for:
-   - DreamUI alpha.2 native theme preflight
-   - Validated theme dreamui.default version 0.1.0
-   - Candidate Ink mapping text.primary -> MainColors.PanelWhite
-   - Theme preflight completed: 1 valid theme(s)
-   - Ink resource adapter not yet verified; no game patches applied
+1. Make a backup of your modded game setup.
+2. Keep the compatible ASI loader you already use. **Do not replace `version.dll`**.
+3. Extract the release ZIP into the Cyberpunk 2077 directory, replacing the earlier DreamUI.asi and Default.dream.
+4. Start Cyberpunk 2077, enter the main menu, and quit.
+5. Open `dreamui/logs/DreamUI.log`.
 
-If the game crashes, remove DreamUI.asi and report the ASI loader and game version.
+## Expected alpha.3 log
 
-## Changes from alpha.1
+    DreamUI v0.1.0-alpha.3 | read-only engine reconnaissance; no patches enabled
+    Engine probe: read-only executable metadata, no in-memory scanning
+    Executable file version: ... (file resource)
+    Engine PE: x64=1 timestamp=... image_size=... rdata_scanned=... bytes
+    Engine literals (diagnostic only): inkStyleResource=... inkStyleProperty=... inkWidget=...
+    Engine status: no live Ink resource handles acquired; game memory untouched
+    Validated theme dreamui.default version 0.1.0 | 20 color tokens
+    Theme preflight completed: 1 valid theme(s)
+    Control hub data model: title=DreamUI version=v0.1.0-alpha.3 installed=1 active=DreamUI Default
+    Control hub native menu tile not installed yet
 
-- Native JSON schema and RGB token validation, not just a ZIP member count.
-- Four explicit candidate Ink binding paths.
-- Mock-tested reversible color apply/restore interface.
+Version and literal-presence fields may vary by game build. If version information is unavailable, the version line may be absent. No color or menu changes should be visible.
 
-The native game color adapter is not implemented; the release intentionally performs no memory writes or UI changes. No paid assets or extra scripting frameworks are bundled.
+## Safety / limitations
+
+- The test build **still requires an existing compatible ASI loader**; an independent bundled loader is a later goal.
+- The on-disk PE data is not evidence of a usable Ink resource handle.
+- If an incompatible game or ASI loader crashes on startup, remove `bin/x64/plugins/DreamUI.asi` to disable the probe.
+- You can report the log without attaching the copyrighted Cyberpunk executable.
+- No third-party paid UI assets are included.
+
+The new DreamUI main-menu tile idea is documented in [CONTROL_HUB.md](CONTROL_HUB.md) and will use only Cyberpunk's native Ink widgets once verified.

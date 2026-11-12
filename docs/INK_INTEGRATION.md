@@ -33,3 +33,7 @@ These are existing Ink style property names, identified from a vanilla-style col
 - Validate native thread scheduling and resource refresh requirements before any modification.
 - Apply exactly one reversible override with tests for failed patching and reset/reload.
 - Test in-game with and without other UI mods.
+
+## Current alpha.3 state
+
+The executable metadata probe reports file version, PE timestamp, image size and presence of selected literal strings in the **on-disk** image. It does **not** locate RTTI objects, memory addresses, or live Ink resources. Verified runtime resource access and first live vanilla color read remain the next core milestone.

@@ -265,14 +265,12 @@ bool InkColorSession::apply(const Theme& theme, InkColorWriter& writer, std::str
             restore();
             return false;
         }
-        // Save before attempting the write: a failed backend write may still
-        // have partially changed the resource, and must be rolled back.
-        originals_.push_back({binding, original});
         if (!writer.write(binding.resource, binding.property, it->second)) {
             error = "failed to write Ink value: " + std::string(binding.property);
             restore();
             return false;
         }
+        originals_.push_back({binding, original});
     }
     writer_ = originals_.empty() ? nullptr : &writer;
     return true;

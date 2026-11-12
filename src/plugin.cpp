@@ -2,6 +2,8 @@
 #include <windows.h>
 #include "dreamui/zip_reader.hpp"
 #include "dreamui/theme.hpp"
+#include "dreamui/control_hub.hpp"
+#include "dreamui/win_probe.hpp"
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -23,16 +25,18 @@ DWORD WINAPI initialize(LPVOID context) {
         fs::create_directories(home / L"logs");
         std::ofstream log(home / L"logs" / L"DreamUI.log",std::ios::app);
         if (!log) return 0;
-        log << "DreamUI alpha.2 native theme preflight | game patches disabled\n";
+        log << "DreamUI " << dreamui::kDreamUIVersion << " | read-only engine reconnaissance; no patches enabled\n";
         wchar_t exe[32768]{};
         GetModuleFileNameW(nullptr,exe,32768);
         if (fs::path(exe).filename()!=L"Cyberpunk2077.exe") {
             log << "No Cyberpunk2077.exe host; refusing game initialization\n";
             return 0;
         }
+        dreamui::log_executable_probe(fs::path(exe),log);
         const auto themeDir=home / L"themes";
         if (!fs::exists(themeDir)) { log << "No themes directory yet\n"; return 0; }
         unsigned accepted=0;
+        dreamui::DreamCatalog catalog;
         for (const auto& entry:fs::directory_iterator(themeDir)) {
             if (!entry.is_regular_file() || entry.path().extension()!=L".dream") continue;
             auto package=dreamui::read_dream_package(entry.path());
@@ -43,6 +47,11 @@ DWORD WINAPI initialize(LPVOID context) {
             auto parsed=dreamui::parse_theme(package);
             if (!parsed) {
                 log << "Rejected theme " << entry.path().filename().string() << ": " << parsed.error << "\n";
+                continue;
+            }
+            std::string catalogError;
+            if (!catalog.add(parsed.theme,catalogError)) {
+                log << "Rejected duplicate or invalid theme: " << catalogError << "\n";
                 continue;
             }
             ++accepted;
@@ -56,6 +65,11 @@ DWORD WINAPI initialize(LPVOID context) {
             }
         }
         log << "Theme preflight completed: " << accepted << " valid theme(s)\n";
+        const auto hub=catalog.view("dreamui.default");
+        log << "Control hub data model: title=" << hub.title << " version=" << hub.version
+            << " installed=" << hub.installed.size() << " active="
+            << (hub.has_themes ? hub.active_name : "(none)") << "\n";
+        log << "Control hub native menu tile not installed yet\n";
         log << "Ink resource adapter not yet verified; no game patches applied\n";
     } catch (const std::exception&) {
         // Filesystem failures must never propagate to Cyberpunk's host process.
