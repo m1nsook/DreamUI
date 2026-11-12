@@ -12,5 +12,5 @@ int main(){
     auto fallback=catalog.view("missing");
     if(!fallback.has_themes || fallback.installed.size()!=2 ||fallback.active_id!="dreamui.default")return 1;
     auto selected=catalog.view("x.frostline");
-    if(selected.active_name!="Frostline" || selected.title!="DreamUI" || selected.version!="v0.1.0-alpha.7")return 1;
+    if(selected.active_name!="Frostline" || selected.title!="DreamUI" || selected.version!="v0.1.0-alpha.8")return 1;
 }
