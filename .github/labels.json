@@ -1,0 +1,92 @@
+[
+  {
+    "name": "type:bug",
+    "color": "D73A4A",
+    "description": "Bug report or game regression"
+  },
+  {
+    "name": "type:feature",
+    "color": "2679D3",
+    "description": "Requested functionality or enhancement"
+  },
+  {
+    "name": "type:maintenance",
+    "color": "858A93",
+    "description": "Refactors and maintenance"
+  },
+  {
+    "name": "type:documentation",
+    "color": "0075CA",
+    "description": "Documentation improvements"
+  },
+  {
+    "name": "type:testing",
+    "color": "AF8DF7",
+    "description": "Tests and compatibility validation"
+  },
+  {
+    "name": "area:native",
+    "color": "8C5EDE",
+    "description": "Windows ASI and native game integration"
+  },
+  {
+    "name": "area:themes",
+    "color": "A65AC8",
+    "description": "Theme engine and .dream format"
+  },
+  {
+    "name": "area:maps",
+    "color": "1D9BAA",
+    "description": "Minimap, world map and markers"
+  },
+  {
+    "name": "area:looting",
+    "color": "D98920",
+    "description": "Inventory, loot, rarity and item pickup"
+  },
+  {
+    "name": "area:backgrounds",
+    "color": "777D86",
+    "description": "Native menu and background resources"
+  },
+  {
+    "name": "area:packaging",
+    "color": "346E91",
+    "description": "Release archives and local build tooling"
+  },
+  {
+    "name": "area:workflows",
+    "color": "3B966A",
+    "description": "CI, labels and GitHub automation"
+  },
+  {
+    "name": "area:docs",
+    "color": "4673BE",
+    "description": "Developer documentation and NextGuide"
+  },
+  {
+    "name": "status:needs-triage",
+    "color": "E5B559",
+    "description": "Waiting for review or reproduction"
+  },
+  {
+    "name": "status:blocked",
+    "color": "D16262",
+    "description": "Blocked by unresolved requirements"
+  },
+  {
+    "name": "status:ready",
+    "color": "6CBE6A",
+    "description": "Ready for implementation"
+  },
+  {
+    "name": "priority:high",
+    "color": "C14E4E",
+    "description": "High impact or urgent regression"
+  },
+  {
+    "name": "good first issue",
+    "color": "A7DBC4",
+    "description": "Approachable task for a first contributor"
+  }
+]
