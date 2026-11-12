@@ -7,10 +7,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "New prerelease tag, e.g. v0.1.0-alpha.6"
+        description: "New prerelease tag, e.g. v0.1.0-alpha.7"
         required: true
         type: string
-        default: "v0.1.0-alpha.6"
+        default: "v0.1.0-alpha.7"
 permissions:
   contents: write
 concurrency:
@@ -21,7 +21,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     env:
-      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'v0.1.0-alpha.5' }}
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || 'v0.1.0-alpha.6' }}
     steps:
       - name: Checkout exact release commit
         uses: actions/checkout@v4
@@ -91,5 +91,5 @@ jobs:
             exit 0
           }
           $archive = "dist/DreamUI-$env:VERSION-win64-test.zip"
-          gh release create "$env:VERSION" "$archive" "$archive.sha256" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --prerelease --title "DreamUI $env:VERSION (deferred ResourceLoader probe)" --notes-file "docs/TESTING.md"
+          gh release create "$env:VERSION" "$archive" "$archive.sha256" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --prerelease --title "DreamUI $env:VERSION (read-only Ink cache lookup)" --notes-file "docs/TESTING.md"
           if ($LASTEXITCODE -ne 0) { throw "GitHub prerelease publication failed" }

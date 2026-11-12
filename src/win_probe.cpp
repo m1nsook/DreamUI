@@ -4,7 +4,9 @@
 #include "dreamui/win_probe.hpp"
 #include "dreamui/pe_probe.hpp"
 #include "dreamui/address_db.hpp"
+#include "dreamui/ink_cache.hpp"
 #include <cstdint>
+#include <iomanip>
 #include <array>
 #include <filesystem>
 #include <ios>
@@ -132,7 +134,49 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
                     log << "ResourceLoader sample +" << kSampleTimesMs[attempt]/1000
                         << "s: " << status << "\n";
                     log.flush();
-                    if(plausible) break;
+                    if(plausible) {
+                        // Read-only inspection of the ALREADY-CACHED vanilla
+                        // resource; supported only on the owner's verified
+                        // executable fingerprint. No native game calls.
+                        if(result.coff_timestamp==1792368047u && result.image_size==92385280u) {
+                            const MemoryRead reader=[](std::uint64_t address,void* destination,std::size_t size) {
+                                if(address<0x10000 || size==0 || size>4096 ||
+                                   address>UINT64_MAX-size)return false;
+                                SIZE_T copied=0;
+                                return ReadProcessMemory(GetCurrentProcess(),
+                                    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address)),
+                                    destination,size,&copied) && copied==size;
+                            };
+                            constexpr std::array<unsigned,3> kCacheDelaySeconds={0,5,12};
+                            for(std::size_t phase=0;phase<kCacheDelaySeconds.size();++phase) {
+                                if(phase>0)
+                                    Sleep((kCacheDelaySeconds[phase]-kCacheDelaySeconds[phase-1])*1000);
+                                const auto style=inspect_ink_cache(reader,singleton,
+                                    R"(base\gameplay\gui\common\main_colors.inkstyle)",
+                                    "MainColors.PanelWhite");
+                                log << "Ink style cache check +" << kCacheDelaySeconds[phase]
+                                    << "s after loader initialization: " << style.reason
+                                    << " | cached_tokens=" << style.cached_tokens
+                                    << " styles=" << style.styles
+                                    << " properties=" << style.properties << "\n";
+                                if(style.status==InkCacheProbe::Status::PropertyCandidate) {
+                                    log << std::fixed << std::setprecision(5);
+                                    log << "Ink MainColors.PanelWhite candidate RGBA (unverified RTTI type): "
+                                        << style.rgba[0] << ", " << style.rgba[1] << ", "
+                                        << style.rgba[2] << ", " << style.rgba[3] << "\n";
+                                    log.unsetf(std::ios::floatfield);
+                                }
+                                log.flush();
+                                // Stop once the cache contains a native style,
+                                // even when the color property is not present.
+                                if(style.found_token || style.status==InkCacheProbe::Status::Invalid)
+                                    break;
+                            }
+                        } else {
+                            log << "Ink style cache: unsupported executable fingerprint; read disabled\n";
+                        }
+                        break;
+                    }
                 }
             } else {
                 log << "ResourceLoader singleton: no validated data-segment symbol\n";
