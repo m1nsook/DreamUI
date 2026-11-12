@@ -1,36 +1,33 @@
-# DreamUI v0.1.0-alpha.6 — read-only vanilla Ink cache inspection
+# DreamUI v0.1.0-alpha.7 — native Ink style-array readiness probe
 
-**Pre-alpha, read-only.** No color changes, game-function calls, custom menu widgets, or writes to game memory.
+**Read-only development test. There are still no visible UI changes.**
 
-## Test alpha.6
+Alpha.6 established that Cyberpunk's ResourceLoader token cache contains the requested vanilla main_colors.inkstyle resource, but its Ink style array was reported as empty. Alpha.7 distinguishes an empty style array from a genuinely populated style, reports additional metadata, and keeps checking after the initial cache match.
 
-1. Extract the test ZIP into Cyberpunk 2077, replacing alpha.5, keeping your existing ASI loader unchanged.
-2. Launch the game, press **Space** past the title screen into the **main menu**, and leave it there for at least **25 seconds**.
-3. Exit and open `dreamui/logs/DreamUI.log`. The file is append-only; share the latest alpha.6 block.
+## Test
 
-## Expected log
+1. Extract the GitHub prerelease ZIP over alpha.6, keeping the compatible ASI loader you already use.
+2. Start Cyberpunk 2077, press **Space** to pass the title screen, and enter the main menu.
+3. Stay at the main menu for **50 seconds** before closing the game. This permits the final +32-second sample after native loader initialization.
+4. Open `dreamui/logs/DreamUI.log` and share **only the latest alpha.7 block**.
 
-After the address-table validation and the ResourceLoader startup checks, alpha.6 logs the first native cache result:
+Expected log pattern:
 
 ```text
-DreamUI v0.1.0-alpha.6 | read-only engine reconnaissance; no patches enabled
-Address DB: game linker map validated, entries_scanned=... supported_symbols=4/4
+DreamUI v0.1.0-alpha.7 | read-only engine reconnaissance; no patches enabled
 ResourceLoader sample +8s: pointer present (not dereferenced)
-Ink style cache check +0s after loader initialization: ...
+Ink style cache check +12s after loader initialization: cached resource path matched, but Ink styles array is empty | cached_tokens=... styles=0 properties=0 style_capacity=... themes=... overrides=... imports=...
+Ink style cache check +20s after loader initialization: ...
+Ink style cache check +32s after loader initialization: ...
 ```
 
-Possible results:
+What the results mean:
 
-- `style resource not present in ResourceLoader token cache`: the target resource was not cached at the time of reading. This is NOT proof the game does not have that resource.
-- `resource token still loading`: a cached token exists but isn't ready.
-- `cached inkStyleResource read successfully`: the cache contained a matching, loaded native resource and Ink style metadata.
-- `property CName matched; inline RGBA floats are candidates (RTTI type unverified)`: the relevant property name was found and the bytes appear consistent with an inline color.
-- `... failed validation`: a guard rejected unexpectedly structured data. Do not force it.
+- `cached resource path matched, but Ink styles array is empty`: the cache entry exists, but DreamUI **cannot yet** read a color value. We need to distinguish initialization timing from a resource-layout problem.
+- `Ink styles array populated; inspecting properties`: native style entries are present, but the requested property might be absent.
+- `property CName matched; inline RGBA floats are candidates (RTTI type unverified)`: a candidate color was found; it is **not authenticated** as HDRColor until RTTI confirms the Variant type.
+- `... failed validation`: the inspector stopped safely on unexpected data; do not force it.
 
-Alpha.6 uses only `ReadProcessMemory` to copy bounded structures, without acquiring engine locks, calling functions or modifying references. Concurrent engine cache changes might make a read inconsistent; in that case it should safely refuse the result.
+This probe uses bounded ReadProcessMemory on the game version fingerprint verified by the project owner. It never calls a native game function, changes game memory, or patches HUD elements. No RED4ext, redscript or Codeware runtime dependency has been added.
 
-**Supported game build:** the read-only Ink cache inspector is intentionally gated to the verified alpha.3 fingerprint: COFF timestamp 1792368047, image size 92385280. Other builds skip that step rather than assuming the same object layout.
-
-Even if a candidate RGBA value appears, no theme change is activated. The variant's RTTI type must be verified before treating it as an authoritative HDRColor.
-
-The main-menu Dream Manager tile and one-ZIP self-contained ASI loader remain later milestones.
+The DreamUI main-menu control tile and a self-contained ASI loader remain future features.

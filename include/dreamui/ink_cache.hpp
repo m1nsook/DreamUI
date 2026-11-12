@@ -12,11 +12,12 @@ using MemoryRead = std::function<bool(std::uint64_t,void*,std::size_t)>;
 struct InkCacheProbe {
     enum class Status {
         Invalid, EmptyCache, NotCached, ExpiredToken, TokenPending,
-        TokenFailed, StyleAvailable, PropertyCandidate
+        TokenFailed, EmptyStyles, StyleAvailable, PropertyCandidate
     } status = Status::Invalid;
     std::string reason;
     std::uint32_t cached_tokens=0, styles=0, properties=0;
     bool found_token=false, found_property=false;
+    std::uint32_t style_capacity=0, themes=0, overrides=0, imports=0;
     // Candidate floats are not authenticated as HDRColor until RTTI type is
     // verified. They must never be applied to a game resource.
     float rgba[4]{};

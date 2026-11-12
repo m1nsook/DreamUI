@@ -147,7 +147,7 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
                                     reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address)),
                                     destination,size,&copied) && copied==size;
                             };
-                            constexpr std::array<unsigned,3> kCacheDelaySeconds={0,5,12};
+                            constexpr std::array<unsigned,5> kCacheDelaySeconds={0,5,12,20,32};
                             for(std::size_t phase=0;phase<kCacheDelaySeconds.size();++phase) {
                                 if(phase>0)
                                     Sleep((kCacheDelaySeconds[phase]-kCacheDelaySeconds[phase-1])*1000);
@@ -158,7 +158,11 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
                                     << "s after loader initialization: " << style.reason
                                     << " | cached_tokens=" << style.cached_tokens
                                     << " styles=" << style.styles
-                                    << " properties=" << style.properties << "\n";
+                                    << " properties=" << style.properties
+                                    << " style_capacity=" << style.style_capacity
+                                    << " themes=" << style.themes
+                                    << " overrides=" << style.overrides
+                                    << " imports=" << style.imports << "\n";
                                 if(style.status==InkCacheProbe::Status::PropertyCandidate) {
                                     log << std::fixed << std::setprecision(5);
                                     log << "Ink MainColors.PanelWhite candidate RGBA (unverified RTTI type): "
@@ -167,9 +171,13 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
                                     log.unsetf(std::ios::floatfield);
                                 }
                                 log.flush();
-                                // Stop once the cache contains a native style,
-                                // even when the color property is not present.
-                                if(style.found_token || style.status==InkCacheProbe::Status::Invalid)
+                                // An empty style array is the main alpha.6
+                                // finding; continue sampling it as the title
+                                // screen transitions to the main menu.
+                                if(style.status==InkCacheProbe::Status::PropertyCandidate ||
+                                   (style.status==InkCacheProbe::Status::StyleAvailable &&
+                                    style.properties>0) ||
+                                   style.status==InkCacheProbe::Status::Invalid)
                                     break;
                             }
                         } else {
