@@ -64,8 +64,10 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
     // at +0x00, with a 0x30-byte header. We only COPY its bytes.
     std::array<std::uint8_t,0x30> map{};
     if(!read_range(read,loader,0,map.data(),map.size()))return failure("resource loader header unreadable");
-    const auto index=u64(map.data(),0), count=u32(map.data(),8),
-               capacity=u32(map.data(),12), nodes=u64(map.data(),16);
+    const auto index=u64(map.data(),0);
+    const auto count=u32(map.data(),8);
+    const auto capacity=u32(map.data(),12);
+    const auto nodes=u64(map.data(),16);
     const auto node_capacity=u32(map.data(),24), stride=u32(map.data(),28),
                node_count=u32(map.data(),36);
     InkCacheProbe out;
@@ -98,7 +100,8 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
             if(!read_range(read,token,0,token_header.data(),token_header.size()))
                 return failure("cached token header unreadable");
             if(u64(token_header.data(),0x48)!=key)return failure("cached token resource path mismatch");
-            const auto finished=u32(token_header.data(),0x58), error=token_header[0x5c];
+            const auto finished=u32(token_header.data(),0x58);
+            const auto error=token_header[0x5c];
             if(error){out.status=InkCacheProbe::Status::TokenFailed;out.reason="resource token marked failed";return out;}
             if(!finished){out.status=InkCacheProbe::Status::TokenPending;out.reason="resource token still loading";return out;}
             const auto resource=u64(token_header.data(),0x28);
@@ -124,8 +127,9 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
                 std::array<std::uint8_t,0x20> style{};
                 if(!read_range(read,styles,static_cast<std::uint64_t>(si)*0x20,style.data(),style.size()))
                     return failure("inkStyle entry unreadable");
-                const auto props=u64(style.data(),0x10), prop_capacity=u32(style.data(),0x18),
-                           prop_count=u32(style.data(),0x1c);
+                const auto props=u64(style.data(),0x10);
+                const auto prop_capacity=u32(style.data(),0x18);
+                const auto prop_count=u32(style.data(),0x1c);
                 if(prop_count>4096 || prop_count>prop_capacity || (prop_count && props<0x10000))
                     return failure("invalid ink style properties metadata");
                 out.properties+=prop_count;
@@ -157,3 +161,4 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
     out.reason="style resource not present in ResourceLoader token cache";
     return out;
 }
+} // namespace dreamui
