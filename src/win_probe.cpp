@@ -6,19 +6,21 @@
 #include "dreamui/address_db.hpp"
 #include "dreamui/ink_cache.hpp"
 #include <cstdint>
-#include <iomanip>
-#include <array>
 #include <filesystem>
-#include <ios>
+#include <fstream>
+#include <iomanip>
+#include <optional>
 #include <ostream>
 #include <span>
+#include <string>
 #include <vector>
+#include <array>
 
 namespace dreamui {
 namespace {
 struct FileHandle {
     HANDLE handle = INVALID_HANDLE_VALUE;
-    ~FileHandle() { if (handle!=INVALID_HANDLE_VALUE) CloseHandle(handle); }
+    ~FileHandle() { if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle); }
 };
 struct MappingHandle {
     HANDLE handle = nullptr;
@@ -28,171 +30,157 @@ struct View {
     const void* address = nullptr;
     ~View() { if (address) UnmapViewOfFile(address); }
 };
+struct Resolver {
+    bool enabled = false;
+    std::uint32_t loader_rva = 0;
+    std::string error;
+};
+Resolver load_resolver(const std::filesystem::path& executable, std::ostream& log) {
+    Resolver out;
+    log << "Resolving executable fingerprint and native ResourceLoader address (once per session)\n";
+    DWORD ignored = 0;
+    const auto resource_size = GetFileVersionInfoSizeW(executable.c_str(), &ignored);
+    if (resource_size && resource_size <= 1024 * 1024) {
+        std::vector<std::uint8_t> info(resource_size);
+        if (GetFileVersionInfoW(executable.c_str(), 0, resource_size, info.data())) {
+            void* value = nullptr;
+            UINT length = 0;
+            if (VerQueryValueW(info.data(), L"\\", &value, &length) &&
+                value && length >= sizeof(VS_FIXEDFILEINFO)) {
+                const auto* fixed = static_cast<const VS_FIXEDFILEINFO*>(value);
+                if (fixed->dwSignature == 0xFEEF04BD) {
+                    log << "Executable file version: "
+                        << HIWORD(fixed->dwFileVersionMS) << '.'
+                        << LOWORD(fixed->dwFileVersionMS) << '.'
+                        << HIWORD(fixed->dwFileVersionLS) << '.'
+                        << LOWORD(fixed->dwFileVersionLS) << "\n";
+                }
+            }
+        }
+    }
+    FileHandle file{CreateFileW(executable.c_str(), GENERIC_READ,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr)};
+    if (file.handle == INVALID_HANDLE_VALUE) {
+        out.error = "game executable could not be opened"; return out;
+    }
+    LARGE_INTEGER length{};
+    if (!GetFileSizeEx(file.handle, &length) || length.QuadPart < 64 ||
+        length.QuadPart > 1024LL * 1024 * 1024) {
+        out.error = "game executable size invalid"; return out;
+    }
+    MappingHandle mapping{CreateFileMappingW(file.handle, nullptr, PAGE_READONLY, 0, 0, nullptr)};
+    if (!mapping.handle) { out.error = "read-only file mapping failed"; return out; }
+    View view{MapViewOfFile(mapping.handle, FILE_MAP_READ, 0, 0, 0)};
+    if (!view.address) { out.error = "read-only file view failed"; return out; }
+    const auto bytes = std::span(
+        reinterpret_cast<const std::uint8_t*>(view.address),
+        static_cast<std::size_t>(length.QuadPart));
+    const auto pe = inspect_pe(bytes);
+    if (!pe.valid) { out.error = "invalid PE: " + pe.error; return out; }
+    log << "Engine PE: timestamp=" << pe.coff_timestamp
+        << " image_size=" << pe.image_size << "\n";
+    // Only the executable fingerprint confirmed by the project owner's
+    // alpha.3 through alpha.7 logs has a verified read-only layout.
+    if (pe.coff_timestamp != 1792368047u || pe.image_size != 92385280u) {
+        out.error = "unsupported executable fingerprint; memory probe disabled";
+        return out;
+    }
+    constexpr std::uint32_t kResourceLoader = 0x783C1034;
+    constexpr std::array<std::uint32_t, 1> wanted{kResourceLoader};
+    const auto db = read_address_database(
+        executable.parent_path() / L"cyberpunk2077_addresses.json",
+        pe.coff_timestamp, pe.sections, wanted);
+    if (!db.valid) {
+        out.error = "game address database rejected: " + db.error;
+        return out;
+    }
+    const auto it = db.matches.find(kResourceLoader);
+    if (it == db.matches.end() || it->second.segment != 3 ||
+        it->second.rva >= pe.image_size ||
+        pe.image_size - it->second.rva < sizeof(void*)) {
+        out.error = "ResourceLoader global not in validated data section";
+        return out;
+    }
+    out.loader_rva = it->second.rva;
+    out.enabled = true;
+    log << "Address DB: linker timestamp matched; ResourceLoader global RVA="
+        << out.loader_rva << " (no game function calls)\n";
+    return out;
 }
+bool safe_read(std::uint64_t address, void* dest, std::size_t length) {
+    if (address < 0x10000 || length == 0 || length > 4096 ||
+        address > UINT64_MAX - length) return false;
+    SIZE_T copied = 0;
+    return ReadProcessMemory(GetCurrentProcess(),
+        reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address)),
+        dest, length, &copied) && copied == length;
+}
+bool mapped_pointer(std::uintptr_t pointer) {
+    if (pointer < 0x10000) return false;
+    MEMORY_BASIC_INFORMATION info{};
+    if (VirtualQuery(reinterpret_cast<const void*>(pointer), &info, sizeof(info)) != sizeof(info))
+        return false;
+    const auto protection = info.Protect & 0xff;
+    return info.State == MEM_COMMIT && !(info.Protect & PAGE_GUARD) &&
+        protection != PAGE_NOACCESS;
+}
+}
+
 void log_executable_probe(const std::filesystem::path& executable, std::ostream& log) noexcept {
+    // Invoked ONLY on an actual Tab keypress, while Cyberpunk is foreground.
+    // The resolver is cached, so subsequent presses don't rescan the giant
+    // address database or the executable.
+    static std::optional<Resolver> resolver;
     try {
-        log << "Engine probe: read-only executable metadata, no in-memory scanning\n";
-        DWORD ignored = 0;
-        const auto resource_size = GetFileVersionInfoSizeW(executable.c_str(),&ignored);
-        if (resource_size && resource_size <= 1024*1024) {
-            std::vector<std::uint8_t> info(resource_size);
-            if (GetFileVersionInfoW(executable.c_str(),0,resource_size,info.data())) {
-                void* value = nullptr; UINT length=0;
-                if (VerQueryValueW(info.data(),L"\\",&value,&length) &&
-                    value && length >= sizeof(VS_FIXEDFILEINFO)) {
-                    auto* fixed = static_cast<const VS_FIXEDFILEINFO*>(value);
-                    if (fixed->dwSignature==0xFEEF04BD) {
-                        log << "Executable file version: "
-                            << HIWORD(fixed->dwFileVersionMS) << '.'
-                            << LOWORD(fixed->dwFileVersionMS) << '.'
-                            << HIWORD(fixed->dwFileVersionLS) << '.'
-                            << LOWORD(fixed->dwFileVersionLS) << " (file resource)\n";
-                    }
-                }
-            }
+        if (!resolver) {
+            resolver = load_resolver(executable, log);
         }
-        FileHandle file{CreateFileW(executable.c_str(),GENERIC_READ,
-                                   FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
-                                   nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr)};
-        if (file.handle==INVALID_HANDLE_VALUE) { log << "Engine probe: executable cannot be opened\n"; return; }
-        LARGE_INTEGER length{};
-        if (!GetFileSizeEx(file.handle,&length) || length.QuadPart<64 || length.QuadPart>1024LL*1024*1024) {
-            log << "Engine probe: executable outside supported file size\n";return;
+        if (!resolver->enabled) {
+            log << "Ink probe unavailable: " << resolver->error << "\n";
+            return;
         }
-        MappingHandle mapping{CreateFileMappingW(file.handle,nullptr,PAGE_READONLY,0,0,nullptr)};
-        if (!mapping.handle) { log << "Engine probe: read-only file mapping failed\n";return; }
-        View view{MapViewOfFile(mapping.handle,FILE_MAP_READ,0,0,0)};
-        if (!view.address) { log << "Engine probe: read-only view failed\n";return; }
-        const auto bytes=std::span(reinterpret_cast<const std::uint8_t*>(view.address),
-                                   static_cast<std::size_t>(length.QuadPart));
-        const auto result=inspect_pe(bytes);
-        if (!result.valid) { log << "Engine probe: invalid executable PE: " << result.error << '\n';return; }
-        log << "Engine PE: x64=" << result.x64 << " timestamp=" << result.coff_timestamp
-            << " image_size=" << result.image_size
-            << " rdata_scanned=" << result.rdata_bytes_scanned << " bytes\n";
-        log << "Engine literals (diagnostic only): inkStyleResource=" << result.ink_style_resource_literal
-            << " inkStyleProperty=" << result.ink_style_property_literal
-            << " inkWidget=" << result.ink_widget_literal << "\n";
-        // Resolve only four known hashes using the game-provided address
-        // database. No external resolver DLL is loaded or called.
-        constexpr std::uint32_t kResourceLoader=0x783C1034;
-        constexpr std::array<std::uint32_t,4> kHashes = {
-            kResourceLoader, 0xC86F39B7, 0x4A610F64, 0x9D14104F
+        const auto module = reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+        if (!module || module > UINT64_MAX - resolver->loader_rva) {
+            log << "Ink probe unavailable: executable image base invalid\n";
+            return;
+        }
+        std::uintptr_t singleton = 0;
+        if (!safe_read(module + resolver->loader_rva, &singleton, sizeof(singleton))) {
+            log << "ResourceLoader: global pointer read failed\n";
+            return;
+        }
+        if (!singleton) {
+            log << "ResourceLoader: null; press Tab again after entering the main menu\n";
+            return;
+        }
+        if (!mapped_pointer(singleton)) {
+            log << "ResourceLoader: pointer not mapped/readable; probe skipped\n";
+            return;
+        }
+        const MemoryRead reader = [](std::uint64_t address, void* destination, std::size_t size) {
+            return safe_read(address, destination, size);
         };
-        const auto db=read_address_database(
-            executable.parent_path() / L"cyberpunk2077_addresses.json",
-            result.coff_timestamp,result.sections,kHashes);
-        if(!db.valid) {
-            log << "Address DB: rejected (" << db.error << "); native probe disabled\n";
-        } else {
-            log << "Address DB: game linker map validated, entries_scanned=" << db.entries_scanned
-                << " supported_symbols=" << db.matches.size() << '/' << kHashes.size() << "\n";
-            for(auto hash:kHashes) {
-                const auto it=db.matches.find(hash);
-                if(it==db.matches.end()) {
-                    log << "Engine symbol hash=" << hash << ": missing\n";
-                } else {
-                    log << "Engine symbol hash=" << hash << ": segment=" << it->second.segment
-                        << " rva=" << it->second.rva << " (address only, not invoked)\n";
-                }
-            }
-            const auto it=db.matches.find(kResourceLoader);
-            if(it!=db.matches.end() && it->second.segment==3 &&
-               it->second.rva<result.image_size &&
-               result.image_size-it->second.rva>=sizeof(void*)) {
-                const auto base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
-                const auto location=reinterpret_cast<const void*>(base+it->second.rva);
-                // ASI bootstrap can run before the game's resource loader is
-                // initialized. Sample the validated global pointer a few times
-                // on this background worker thread, with a fixed 15s deadline.
-                // No game API calls, object dereferences, or memory writes.
-                constexpr std::array<unsigned,4> kSampleTimesMs={0,3000,8000,15000};
-                log << "ResourceLoader: checking startup initialization at +0,+3,+8,+15 seconds\n";
-                log.flush();
-                for(std::size_t attempt=0;attempt<kSampleTimesMs.size();++attempt) {
-                    if(attempt>0)
-                        Sleep(kSampleTimesMs[attempt]-kSampleTimesMs[attempt-1]);
-                    std::uintptr_t singleton=0;
-                    SIZE_T read=0;
-                    if(!ReadProcessMemory(GetCurrentProcess(),location,&singleton,sizeof(singleton),&read) ||
-                       read!=sizeof(singleton)) {
-                        log << "ResourceLoader sample +" << kSampleTimesMs[attempt]/1000
-                            << "s: safe read failed\n";
-                        log.flush();
-                        break;
-                    }
-                    MEMORY_BASIC_INFORMATION info{};
-                    bool plausible=false;
-                    if(singleton>=0x10000 &&
-                       VirtualQuery(reinterpret_cast<const void*>(singleton),&info,sizeof(info))==sizeof(info)) {
-                        const auto protection=info.Protect & 0xff;
-                        plausible=info.State==MEM_COMMIT && !(info.Protect & PAGE_GUARD) &&
-                            protection!=PAGE_NOACCESS;
-                    }
-                    const char* status=singleton==0 ? "null/not initialized" :
-                        plausible ? "pointer present (not dereferenced)" : "unverified pointer";
-                    log << "ResourceLoader sample +" << kSampleTimesMs[attempt]/1000
-                        << "s: " << status << "\n";
-                    log.flush();
-                    if(plausible) {
-                        // Read-only inspection of the ALREADY-CACHED vanilla
-                        // resource; supported only on the owner's verified
-                        // executable fingerprint. No native game calls.
-                        if(result.coff_timestamp==1792368047u && result.image_size==92385280u) {
-                            const MemoryRead reader=[](std::uint64_t address,void* destination,std::size_t size) {
-                                if(address<0x10000 || size==0 || size>4096 ||
-                                   address>UINT64_MAX-size)return false;
-                                SIZE_T copied=0;
-                                return ReadProcessMemory(GetCurrentProcess(),
-                                    reinterpret_cast<const void*>(static_cast<std::uintptr_t>(address)),
-                                    destination,size,&copied) && copied==size;
-                            };
-                            constexpr std::array<unsigned,5> kCacheDelaySeconds={0,5,12,20,32};
-                            for(std::size_t phase=0;phase<kCacheDelaySeconds.size();++phase) {
-                                if(phase>0)
-                                    Sleep((kCacheDelaySeconds[phase]-kCacheDelaySeconds[phase-1])*1000);
-                                const auto style=inspect_ink_cache(reader,singleton,
-                                    R"(base\gameplay\gui\common\main_colors.inkstyle)",
-                                    "MainColors.PanelWhite");
-                                log << "Ink style cache check +" << kCacheDelaySeconds[phase]
-                                    << "s after loader initialization: " << style.reason
-                                    << " | cached_tokens=" << style.cached_tokens
-                                    << " styles=" << style.styles
-                                    << " properties=" << style.properties
-                                    << " style_capacity=" << style.style_capacity
-                                    << " themes=" << style.themes
-                                    << " overrides=" << style.overrides
-                                    << " imports=" << style.imports << "\n";
-                                if(style.status==InkCacheProbe::Status::PropertyCandidate) {
-                                    log << std::fixed << std::setprecision(5);
-                                    log << "Ink MainColors.PanelWhite candidate RGBA (unverified RTTI type): "
-                                        << style.rgba[0] << ", " << style.rgba[1] << ", "
-                                        << style.rgba[2] << ", " << style.rgba[3] << "\n";
-                                    log.unsetf(std::ios::floatfield);
-                                }
-                                log.flush();
-                                // An empty style array is the main alpha.6
-                                // finding; continue sampling it as the title
-                                // screen transitions to the main menu.
-                                if(style.status==InkCacheProbe::Status::PropertyCandidate ||
-                                   (style.status==InkCacheProbe::Status::StyleAvailable &&
-                                    style.properties>0) ||
-                                   style.status==InkCacheProbe::Status::Invalid)
-                                    break;
-                            }
-                        } else {
-                            log << "Ink style cache: unsupported executable fingerprint; read disabled\n";
-                        }
-                        break;
-                    }
-                }
-            } else {
-                log << "ResourceLoader singleton: no validated data-segment symbol\n";
-            }
+        const auto style = inspect_ink_cache(reader, singleton,
+            R"(base\gameplay\gui\common\main_colors.inkstyle)",
+            "MainColors.PanelWhite");
+        log << "Ink style: " << style.reason
+            << " | cached_tokens=" << style.cached_tokens
+            << " styles=" << style.styles
+            << " properties=" << style.properties
+            << " style_capacity=" << style.style_capacity
+            << " themes=" << style.themes
+            << " overrides=" << style.overrides
+            << " imports=" << style.imports << "\n";
+        if (style.status == InkCacheProbe::Status::PropertyCandidate) {
+            log << std::fixed << std::setprecision(5)
+                << "MainColors.PanelWhite candidate RGBA (RTTI not verified): "
+                << style.rgba[0] << ", " << style.rgba[1] << ", "
+                << style.rgba[2] << ", " << style.rgba[3] << "\n";
+            log.unsetf(std::ios::floatfield);
         }
-        log << "Engine status: no live Ink resource handles acquired; game memory untouched\n";
     } catch (...) {
-        log << "Engine probe encountered an error and safely stopped\n";
+        log << "Ink probe encountered an exception; inspection safely stopped\n";
     }
 }
 } // namespace dreamui

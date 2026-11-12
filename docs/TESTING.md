@@ -1,33 +1,30 @@
-# DreamUI v0.1.0-alpha.7 — native Ink style-array readiness probe
+# DreamUI v0.1.0-alpha.8 — on-demand Tab diagnostics
 
-**Read-only development test. There are still no visible UI changes.**
+**This release is a read-only diagnostic tool.** It does not recolor the game or add UI widgets.
 
-Alpha.6 established that Cyberpunk's ResourceLoader token cache contains the requested vanilla main_colors.inkstyle resource, but its Ink style array was reported as empty. Alpha.7 distinguishes an empty style array from a genuinely populated style, reports additional metadata, and keeps checking after the initial cache match.
+## What's different
 
-## Test
+There are no automatic 3/8/15/32-second probes and no automatic engine scans at startup. DreamUI loads the .dream theme package, then listens for Tab **without intercepting it**.
 
-1. Extract the GitHub prerelease ZIP over alpha.6, keeping the compatible ASI loader you already use.
-2. Start Cyberpunk 2077, press **Space** to pass the title screen, and enter the main menu.
-3. Stay at the main menu for **50 seconds** before closing the game. This permits the final +32-second sample after native loader initialization.
-4. Open `dreamui/logs/DreamUI.log` and share **only the latest alpha.7 block**.
+**Press Tab whenever you want another read.** The game can stay running for hours: every distinct press makes one fresh ResourceLoader/Ink cache inspection. You do **not** need to exit or restart Cyberpunk to collect more results.
 
-Expected log pattern:
+## How to test
 
-```text
-DreamUI v0.1.0-alpha.7 | read-only engine reconnaissance; no patches enabled
-ResourceLoader sample +8s: pointer present (not dereferenced)
-Ink style cache check +12s after loader initialization: cached resource path matched, but Ink styles array is empty | cached_tokens=... styles=0 properties=0 style_capacity=... themes=... overrides=... imports=...
-Ink style cache check +20s after loader initialization: ...
-Ink style cache check +32s after loader initialization: ...
-```
+1. Extract this ZIP over your current DreamUI.asi and Default.dream; keep your existing ASI loader. Do not overwrite version.dll.
+2. Start Cyberpunk normally. Press Space past its title screen, enter the actual main menu and wait until it finishes loading.
+3. Press **Tab once**, then open Cyberpunk 2077/dreamui/logs/DreamUI-probe.log. If the game takes time to initialize, press Tab again later; there is no deadline and no automatic stopping.
+4. You can press Tab multiple times, enter gameplay, come back to the menu, and press Tab again **without restarting**. Each key press creates an individually numbered probe section.
+5. Send the latest DreamUI-probe.log when you're ready.
 
-What the results mean:
+The diagnostic file is **overwritten at the beginning of each game launch**, rather than indefinitely appending older alpha logs. It is empty until the first Tab press. DreamUI.log still contains a short startup record confirming ASI and theme loading.
 
-- `cached resource path matched, but Ink styles array is empty`: the cache entry exists, but DreamUI **cannot yet** read a color value. We need to distinguish initialization timing from a resource-layout problem.
-- `Ink styles array populated; inspecting properties`: native style entries are present, but the requested property might be absent.
-- `property CName matched; inline RGBA floats are candidates (RTTI type unverified)`: a candidate color was found; it is **not authenticated** as HDRColor until RTTI confirms the Variant type.
-- `... failed validation`: the inspector stopped safely on unexpected data; do not force it.
+## Controls and safety
 
-This probe uses bounded ReadProcessMemory on the game version fingerprint verified by the project owner. It never calls a native game function, changes game memory, or patches HUD elements. No RED4ext, redscript or Codeware runtime dependency has been added.
+- Plain **Tab**, while the Cyberpunk window is focused, triggers one probe on the key-down edge. Hold Tab and it won't continuously repeat.
+- Alt+Tab, Shift+Tab, and Windows+Tab are ignored, so normal window switching and Steam overlay shortcuts don't trigger DreamUI.
+- This does not suppress Cyberpunk's usual Tab behavior (for example, the scanner during gameplay).
+- On the first Tab press, DreamUI reads the executable fingerprint and game-provided address table once. **Further presses reuse the resolved pointer address** and only perform the current read-only cache inspection.
+- Every probe checks whether ResourceLoader is initialized. An empty cache at the title screen simply means you should press Tab again after the main menu is ready.
+- Other executable versions fail closed. No game-engine methods, hooks or memory writes are made.
 
-The DreamUI main-menu control tile and a self-contained ASI loader remain future features.
+A matching cache token is not yet proof of a populated style or valid HDRColor. Values are treated as unverified candidates. The native DreamUI menu control tile and one-ZIP integrated loader are still future features.

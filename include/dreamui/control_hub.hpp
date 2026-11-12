@@ -6,7 +6,7 @@
 #include <vector>
 
 namespace dreamui {
-inline constexpr std::string_view kDreamUIVersion = "v0.1.0-alpha.7";
+inline constexpr std::string_view kDreamUIVersion = "v0.1.0-alpha.8";
 struct DreamSummary {
     std::string id;
     std::string name;
