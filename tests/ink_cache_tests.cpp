@@ -63,6 +63,11 @@ int main() {
     if(result.status!=State::PropertyCandidate || !result.found_token ||
        !result.found_property || result.styles!=1 ||result.properties!=1 ||
        result.rgba[0]!=0.8f){std::cerr<<"expected property candidate: "<<result.reason<<'\n';return 1;}
+    mem.put(resource,0x4c,0u);
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    if(result.status!=State::EmptyStyles || !result.found_token ||
+       result.styles!=0 || result.style_capacity!=1)return 1;
+    mem.put(resource,0x4c,1u);
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::StyleAvailable || result.found_property)return 1;
     mem.put(index,static_cast<std::size_t>(hash%8)*4,UINT32_MAX);
@@ -77,6 +82,10 @@ int main() {
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
     if(result.status!=State::Invalid)return 1;
     mem.put(token,0x48,key);
+    mem.put(resource,0x5c,2000u); // reject implausible auxiliary Ink array
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
+    if(result.status!=State::Invalid)return 1;
+    mem.put(resource,0x5c,0u);
     mem.put(loader,12,0u); // invalid map capacity
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.PanelWhite");
     if(result.status!=State::Invalid)return 1;

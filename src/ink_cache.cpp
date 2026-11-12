@@ -108,7 +108,7 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
             if(resource<0x10000){out.status=InkCacheProbe::Status::TokenPending;out.reason="token loaded without accessible resource handle";return out;}
             // RED4ext.SDK: inkStyleResource : CResource; CResource.path +0x30;
             // DynArray<inkStyle> styles +0x40; style.properties +0x10.
-            std::array<std::uint8_t,0x50> resource_header{};
+            std::array<std::uint8_t,0x80> resource_header{};
             if(!read_range(read,resource,0,resource_header.data(),resource_header.size()))
                 return failure("inkStyleResource header unreadable");
             if(u64(resource_header.data(),0x30)!=key)
@@ -118,9 +118,26 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
             const auto style_size=u32(resource_header.data(),0x4c);
             if(style_size>512 || style_size>style_capacity || (style_size && styles<0x10000))
                 return failure("invalid ink styles array metadata");
-            out.status=InkCacheProbe::Status::StyleAvailable;
+            // Keep distinguishing a cached file from a populated Ink style.
+            // SDK has themes, overrides, and styleImports arrays at +0x50,
+            // +0x60 and +0x70 respectively; counts are at +0x0C.
+            const auto themes=u32(resource_header.data(),0x5c);
+            const auto overrides=u32(resource_header.data(),0x6c);
+            const auto imports=u32(resource_header.data(),0x7c);
+            if(themes>1024 || overrides>1024 || imports>1024)
+                return failure("invalid auxiliary Ink style array metadata");
             out.styles=style_size;
-            out.reason="cached inkStyleResource read successfully";
+            out.style_capacity=style_capacity;
+            out.themes=themes;
+            out.overrides=overrides;
+            out.imports=imports;
+            if(style_size==0) {
+                out.status=InkCacheProbe::Status::EmptyStyles;
+                out.reason="cached resource path matched, but Ink styles array is empty";
+                return out;
+            }
+            out.status=InkCacheProbe::Status::StyleAvailable;
+            out.reason="Ink styles array populated; inspecting properties";
             // A resource can hold more than one style; search each of the
             // first few (bounded), and bound properties too.
             for(std::uint32_t si=0;si<std::min(style_size,16u);++si) {
