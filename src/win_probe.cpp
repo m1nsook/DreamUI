@@ -3,7 +3,9 @@
 #include <winver.h>
 #include "dreamui/win_probe.hpp"
 #include "dreamui/pe_probe.hpp"
+#include "dreamui/address_db.hpp"
 #include <cstdint>
+#include <array>
 #include <filesystem>
 #include <ios>
 #include <ostream>
@@ -69,6 +71,56 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
         log << "Engine literals (diagnostic only): inkStyleResource=" << result.ink_style_resource_literal
             << " inkStyleProperty=" << result.ink_style_property_literal
             << " inkWidget=" << result.ink_widget_literal << "\n";
+        // Resolve only four known hashes using the game-provided address
+        // database. No external resolver DLL is loaded or called.
+        constexpr std::uint32_t kResourceLoader=0x783C1034;
+        constexpr std::array<std::uint32_t,4> kHashes = {
+            kResourceLoader, 0xC86F39B7, 0x4A610F64, 0x9D14104F
+        };
+        const auto db=read_address_database(
+            executable.parent_path() / L"cyberpunk2077_addresses.json",
+            result.coff_timestamp,result.sections,kHashes);
+        if(!db.valid) {
+            log << "Address DB: rejected (" << db.error << "); native probe disabled\n";
+        } else {
+            log << "Address DB: game linker map validated, entries_scanned=" << db.entries_scanned
+                << " supported_symbols=" << db.matches.size() << '/' << kHashes.size() << "\n";
+            for(auto hash:kHashes) {
+                const auto it=db.matches.find(hash);
+                if(it==db.matches.end()) {
+                    log << "Engine symbol hash=" << hash << ": missing\n";
+                } else {
+                    log << "Engine symbol hash=" << hash << ": segment=" << it->second.segment
+                        << " rva=" << it->second.rva << " (address only, not invoked)\n";
+                }
+            }
+            const auto it=db.matches.find(kResourceLoader);
+            if(it!=db.matches.end() && it->second.segment==3 &&
+               it->second.rva<result.image_size &&
+               result.image_size-it->second.rva>=sizeof(void*)) {
+                const auto base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
+                const auto location=reinterpret_cast<const void*>(base+it->second.rva);
+                std::uintptr_t singleton=0;
+                SIZE_T read=0;
+                if(ReadProcessMemory(GetCurrentProcess(),location,&singleton,sizeof(singleton),&read) &&
+                   read==sizeof(singleton)) {
+                    MEMORY_BASIC_INFORMATION info{};
+                    bool plausible=false;
+                    if(singleton>=0x10000 && VirtualQuery(reinterpret_cast<void*>(singleton),&info,sizeof(info))==sizeof(info)) {
+                        const auto protection=info.Protect & 0xff;
+                        plausible=info.State==MEM_COMMIT && !(info.Protect & PAGE_GUARD) &&
+                            protection!=PAGE_NOACCESS;
+                    }
+                    log << "ResourceLoader singleton: "
+                        << (singleton==0 ? "null/not initialized" : plausible ? "pointer present (not dereferenced)" : "unverified pointer")
+                        << "\n";
+                } else {
+                    log << "ResourceLoader singleton: safe read failed\n";
+                }
+            } else {
+                log << "ResourceLoader singleton: no validated data-segment symbol\n";
+            }
+        }
         log << "Engine status: no live Ink resource handles acquired; game memory untouched\n";
     } catch (...) {
         log << "Engine probe encountered an error and safely stopped\n";

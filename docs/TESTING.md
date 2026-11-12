@@ -1,36 +1,19 @@
-# DreamUI v0.1.0-alpha.3 — read-only engine probe and theme catalog
+# DreamUI v0.1.0-alpha.4 — independent address resolver test
 
-**Experimental test build — not a HUD recoloring mod.** It does not modify game memory, change colors or display DreamUI's main-menu tile.
+This is a **diagnostic prerelease**: no engine functions, memory writes, UI patches or menu widgets are enabled.
 
-## Installation
+Install over alpha.3, using your existing ASI loader. Do not replace version.dll. Launch Cyberpunk, visit the main menu, then inspect dreamui/logs/DreamUI.log.
 
-1. Make a backup of your modded game setup.
-2. Keep the compatible ASI loader you already use. **Do not replace `version.dll`**.
-3. Extract the release ZIP into the Cyberpunk 2077 directory, replacing the earlier DreamUI.asi and Default.dream.
-4. Start Cyberpunk 2077, enter the main menu, and quit.
-5. Open `dreamui/logs/DreamUI.log`.
+New expected log lines:
 
-## Expected alpha.3 log
+    Address DB: game linker map validated, entries_scanned=... supported_symbols=.../4
+    Engine symbol hash=...: segment=... rva=... (address only, not invoked)
+    ResourceLoader singleton: pointer present (not dereferenced)
 
-    DreamUI v0.1.0-alpha.3 | read-only engine reconnaissance; no patches enabled
-    Engine probe: read-only executable metadata, no in-memory scanning
-    Executable file version: ... (file resource)
-    Engine PE: x64=1 timestamp=... image_size=... rdata_scanned=... bytes
-    Engine literals (diagnostic only): inkStyleResource=... inkStyleProperty=... inkWidget=...
-    Engine status: no live Ink resource handles acquired; game memory untouched
-    Validated theme dreamui.default version 0.1.0 | 20 color tokens
-    Theme preflight completed: 1 valid theme(s)
-    Control hub data model: title=DreamUI version=v0.1.0-alpha.3 installed=1 active=DreamUI Default
-    Control hub native menu tile not installed yet
+A null pointer can be normal at early startup. A missing or mismatched database causes a logged refusal instead of an unsafe fallback:
 
-Version and literal-presence fields may vary by game build. If version information is unavailable, the version line may be absent. No color or menu changes should be visible.
+    Address DB: rejected (...) ; native probe disabled
 
-## Safety / limitations
+This build reads the game's own bin/x64/cyberpunk2077_addresses.json directly. It does not depend on RED4ext.dll, and the database is **not** bundled or redistributed. Standard PC distributions usually provide it, but availability depends on platform.
 
-- The test build **still requires an existing compatible ASI loader**; an independent bundled loader is a later goal.
-- The on-disk PE data is not evidence of a usable Ink resource handle.
-- If an incompatible game or ASI loader crashes on startup, remove `bin/x64/plugins/DreamUI.asi` to disable the probe.
-- You can report the log without attaching the copyrighted Cyberpunk executable.
-- No third-party paid UI assets are included.
-
-The new DreamUI main-menu tile idea is documented in [CONTROL_HUB.md](CONTROL_HUB.md) and will use only Cyberpunk's native Ink widgets once verified.
+No vanilla Ink resource is read, and the UI should look unchanged. Do not upload copyrighted game executables or the full address table; the log is sufficient. The standalone ASI loader and native DreamUI main-menu tile remain future milestones.
