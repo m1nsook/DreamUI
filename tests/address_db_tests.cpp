@@ -11,7 +11,7 @@ int main(int argc,char** argv){
     const dreamui::AddressSections s{0x1000,0x2000,0x4000,0x1000,0x6000,0x1000,0x9000};
     const std::array<std::uint32_t,3> needed={0x783C1034u,0xC86F39B7u,0x4A610F64u};
     auto put=[&](std::string v){std::ofstream o(path,std::ios::binary);o << v;};
-    const std::string sample="{\"Linker map timestamp\":\"6ad55daf\",\"Addresses\":["
+    const std::string sample="{\"Linker map timestamp\":\"6ad55daf (Oct 19 2026)\",\"Addresses\":["
        "{\"hash\":\"2017202228\",\"symbol\":\"loader\",\"offset\":\"0003:00000120\"},"
        "{\"hash\":\"3362732471\",\"offset\":\"0001:00000050\"},"
        "{\"hash\":\"1247874916\",\"offset\":\"0001:00000075\"}]}";

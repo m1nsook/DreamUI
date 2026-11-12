@@ -65,7 +65,14 @@ AddressDbResult read_address_database(const std::filesystem::path& path,
     const std::string_view lead(header.data(),static_cast<std::size_t>(file.gcount()));
     auto stamp=field(lead,"\"Linker map timestamp\"");
     if(!stamp){result.error="linker-map timestamp missing";return result;}
-    const auto timestamp=number(*stamp,16);
+    // The game stamps the hex timestamp with a readable build date, e.g.
+    // "6ad55daf (Oct 19 2026)". Only the initial 8 hex digits are the stamp.
+    auto raw=*stamp;
+    if(raw.substr(0,2)=="0x" || raw.substr(0,2)=="0X") raw.remove_prefix(2);
+    if(raw.size()<8 || (raw.size()>8 && raw[8]!=' ' && raw[8]!='(')) {
+        result.error="invalid linker-map timestamp";return result;
+    }
+    const auto timestamp=number(raw.substr(0,8),16);
     if(!timestamp){result.error="invalid linker-map timestamp";return result;}
     result.linker_timestamp=*timestamp;
     if(*timestamp!=exe_timestamp){result.error="linker-map timestamp does not match game executable";return result;}
