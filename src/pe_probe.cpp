@@ -47,10 +47,26 @@ PeProbe inspect_pe(std::span<const std::uint8_t> image) {
     result.x64=true;
     result.coff_timestamp=u32(image,pe+8);
     result.image_size=u32(image,opt+56);
+    result.sections.image_size=result.image_size;
     // Inspect only the on-disk .rdata section: no scanning live game memory.
     // Literal string hits are diagnostic clues, not validated engine addresses.
     for (std::size_t i=0;i<sections;i++) {
         const auto entry=section_table+i*40;
+        const auto name=std::string_view(reinterpret_cast<const char*>(image.data()+entry),8);
+        const auto virtual_rva=u32(image,entry+12);
+        const auto virtual_bytes=std::max(u32(image,entry+8),u32(image,entry+16));
+        const auto bounded_bytes=(virtual_rva<result.image_size)
+            ? std::min(virtual_bytes,result.image_size-virtual_rva):0u;
+        if(name.substr(0,5)==".text" && bounded_bytes) {
+            result.sections.text_rva=virtual_rva;
+            result.sections.text_size=bounded_bytes;
+        } else if(name.substr(0,5)==".data" && bounded_bytes) {
+            result.sections.data_rva=virtual_rva;
+            result.sections.data_size=bounded_bytes;
+        } else if(name.substr(0,6)==".rdata" && bounded_bytes) {
+            result.sections.rdata_rva=virtual_rva;
+            result.sections.rdata_size=bounded_bytes;
+        }
         constexpr std::array<char,8> rdata={'.','r','d','a','t','a',0,0};
         if (std::memcmp(image.data()+entry,rdata.data(),rdata.size())!=0) continue;
         const auto size=static_cast<std::size_t>(u32(image,entry+16));

@@ -20,7 +20,7 @@ int main(){
     std::memcpy(data.data()+0x300,"inkStyleResource",16);
     std::memcpy(data.data()+0x330,"inkWidget",9);
     auto result=dreamui::inspect_pe(data);
-    if (!result.valid || !result.x64 || result.coff_timestamp!=0x12345678 || result.image_size!=0x3000 || result.rdata_bytes_scanned!=0x100 || !result.ink_style_resource_literal || result.ink_style_property_literal || !result.ink_widget_literal){
+    if (!result.valid || result.sections.rdata_rva!=0 || !result.x64 || result.coff_timestamp!=0x12345678 || result.image_size!=0x3000 || result.rdata_bytes_scanned!=0x100 || !result.ink_style_resource_literal || result.ink_style_property_literal || !result.ink_widget_literal){
         std::cerr << "valid PE parsing failure: " << result.error << '\n'; return 1;
     }
     w32(data,0x188+20,0x490);

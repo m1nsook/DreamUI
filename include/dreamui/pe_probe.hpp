@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <span>
 #include <string>
+#include "dreamui/address_db.hpp"
 
 namespace dreamui {
 // Read-only analysis of the on-disk Windows executable. Not an Ink RTTI/engine
@@ -12,6 +13,7 @@ struct PeProbe {
     bool x64 = false;
     std::uint32_t coff_timestamp = 0;
     std::uint32_t image_size = 0;
+    AddressSections sections{};
     std::size_t rdata_bytes_scanned = 0;
     bool ink_style_resource_literal = false;
     bool ink_style_property_literal = false;
