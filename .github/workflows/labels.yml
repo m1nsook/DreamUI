@@ -1,0 +1,41 @@
+name: Initialize and sync labels
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.json
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create and update repository labels (never delete)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const labels = JSON.parse(fs.readFileSync('.github/labels.json', 'utf8'));
+            const {owner, repo} = context.repo;
+            for (const label of labels) {
+              try {
+                const current = await github.rest.issues.getLabel({owner, repo, name: label.name});
+                if (current.data.color.toLowerCase() !== label.color.toLowerCase() ||
+                    current.data.description !== label.description) {
+                  await github.rest.issues.updateLabel({
+                    owner, repo, name: label.name,
+                    new_name: label.name, color: label.color,
+                    description: label.description
+                  });
+                  core.info('Updated ' + label.name);
+                }
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                await github.rest.issues.createLabel({owner, repo, ...label});
+                core.info('Created ' + label.name);
+              }
+            }

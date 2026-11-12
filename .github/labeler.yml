@@ -1,0 +1,35 @@
+"area:native":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/**"
+          - "include/**"
+          - "CMakeLists.txt"
+"area:themes":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "themes/**"
+          - "tools/dreamtool.py"
+"area:packaging":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tools/**"
+          - ".github/workflows/release-testing.yml"
+"area:workflows":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/labels.json"
+          - ".github/labeler.yml"
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "README.md"
+          - "docs/**"
+"type:testing":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+"type:documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
