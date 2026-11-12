@@ -19,10 +19,14 @@ struct MemoryInk final : dreamui::InkColorWriter {
         return true;
     }
     bool write(std::string_view, std::string_view property, dreamui::Rgb color) override {
-        if (property == failWrite) return false;
         auto it = values.find(std::string(property));
         if (it == values.end()) return false;
         it->second = color;
+        if (property == failWrite) {
+            // Simulate a partially applied engine write that reports failure.
+            failWrite.clear();
+            return false;
+        }
         return true;
     }
 };
