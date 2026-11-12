@@ -1,0 +1,31 @@
+name: Native proof of concept
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate packager and manifest
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Package default theme
+        run: python tools/dreamtool.py pack themes/Default dist/Default.dream
+      - name: Configure native ASI and tests
+        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+      - name: Build native ASI
+        run: cmake --build build --config Release
+      - name: Test native ZIP reader
+        run: ctest --test-dir build -C Release --output-on-failure
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DreamUI-native-probe
+          path: |
+            build/Release/DreamUI.asi
+            dist/Default.dream
+          if-no-files-found: error

@@ -1,0 +1,8 @@
+/build/
+/dist/
+/.vs/
+__pycache__/
+*.pyc
+*.pdb
+*.obj
+*.asi
