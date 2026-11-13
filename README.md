@@ -21,7 +21,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible RGB apply/restore logic.
 - **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested.
-- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, atomic three-property HDRColor load-stage transactions, journaled rollback, and guarded exact-instance restoration. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and restore are verified.
+- **Conditional native serializer-stage bridge:** source-only experimental hook with strong serializer-owned handle checks, three-property HDRColor preflight, atomic transactions, journaled rollback and exact-instance restoration. A dedicated opt-in build and marker enable **read-only** inspection; a second independent marker is required for native writes. Ordinary builds keep the bridge disabled.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
@@ -32,7 +32,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 
 ## Not implemented
 
-Actual engine resource handles, Ink reading/writing, theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
+A game-verified native serializer callback, reliable immediate Ink refresh and in-game theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. The source-only experimental hook and read/write adapters are not yet verified in a running game. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
 
 An [optional HUD Painter exporter](docs/HUDPAINTER_COMPAT.md) can apply `.dream` palettes through HUD Painter in installations that already have it, without making HUD Painter a dependency of DreamUI's ASI.
 
