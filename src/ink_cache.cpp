@@ -1,4 +1,5 @@
 #include "dreamui/ink_cache.hpp"
+#include "dreamui/native_ink.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -156,16 +157,29 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
                         return failure("inkStyleProperty entry unreadable");
                     if(u64(item.data(),0)!=property_hash)continue;
                     out.found_property=true;
-                    const auto type=u64(item.data(),0x8);
-                    if((type&1)==0 || (type&~1ULL)<0x10000)
-                        return failure("matching property variant is not verified as inline");
-                    float rgba[4]{};
-                    std::memcpy(rgba,item.data()+0x10,sizeof(rgba));
-                    for(float channel:rgba)if(!std::isfinite(channel) || channel<0 || channel>128)
-                        return failure("matching color candidate outside safe numeric range");
-                    std::copy(std::begin(rgba),std::end(rgba),out.rgba);
+                    const auto tag=u64(item.data(),0x8);
+                    // SDK Variant: the low bit marks an inlined value. The
+                    // remaining bits point to rtti::IType. For HDRColor the
+                    // class descriptor has CClass.name at +0x18, native size
+                    // at +0x68 and alignment at +0x74.
+                    if((tag&1)==0 || (tag&~1ULL)<0x10000)
+                        return failure("matching Ink Variant is not a valid inline value");
+                    std::array<std::uint8_t,0x78> rtti{};
+                    if(!read_range(read,tag&~1ULL,0,rtti.data(),rtti.size()))
+                        return failure("matching Ink Variant RTTI unreadable");
+                    if(u64(rtti.data(),0x18)!=cname_hash("HDRColor") ||
+                       u32(rtti.data(),0x68)!=0x10 ||
+                       u32(rtti.data(),0x74)!=0x10)
+                        return failure("matching Ink Variant RTTI is not HDRColor");
+                    HdrColor rgba{};
+                    std::memcpy(&rgba,item.data()+0x10,sizeof(rgba));
+                    if(!finite_hdr(rgba))
+                        return failure("matching HDRColor contains non-finite/invalid floats");
+                    const float channels[4]={rgba.red,rgba.green,rgba.blue,rgba.alpha};
+                    std::copy(std::begin(channels),std::end(channels),out.rgba);
+                    out.hdr_type_match=true;
                     out.status=InkCacheProbe::Status::PropertyCandidate;
-                    out.reason="property CName matched; inline RGBA floats are candidates (RTTI type unverified)";
+                    out.reason="HDRColor RTTI layout matched; read-only color candidate (no owned resource lifetime)";
                     return out;
                 }
             }
