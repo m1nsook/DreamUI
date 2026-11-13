@@ -3,6 +3,7 @@
 #include "dreamui/win_load_hook.hpp"
 #include "dreamui/ink_load_patch.hpp"
 #include "dreamui/ink_style_snapshot.hpp"
+#include "dreamui/native_ink_clone.hpp"
 #include "dreamui/address_db.hpp"
 #include "dreamui/pe_probe.hpp"
 #include <algorithm>
@@ -51,6 +52,9 @@ std::atomic<std::uint32_t> s_full_tree_observed_properties{0};
 std::atomic<std::uint32_t> s_full_tree_unsupported{0};
 std::atomic<std::uint32_t> s_full_tree_styles{0};
 std::atomic<std::uint32_t> s_full_tree_colors{0};
+// Symbol lookup alone never authorizes a native clone call or lifetime
+// extension; proper game-engine Handle release is still unwired.
+std::atomic_bool s_clone_symbol_resolved{false};
 std::atomic<std::uint32_t> s_owned_color_entries{0};
 std::atomic<std::uint32_t> s_owned_source_styles{0};
 std::atomic<std::uint32_t> s_applied{0};
@@ -331,8 +335,10 @@ void __fastcall schedule_hook(std::uint64_t a,std::uint8_t b,std::uint64_t c,
 }
 bool get_target_address(const std::filesystem::path& game_exe,
                         std::uint32_t& rva,
+                        std::uint32_t& optional_clone_rva,
                         AddressSections& sections,
                         std::string& error) {
+    optional_clone_rva=0;
     std::ifstream input(game_exe,std::ios::binary|std::ios::ate);
     if(!input){error="executable unavailable";return false;}
     const auto length=input.tellg();
@@ -346,7 +352,10 @@ bool get_target_address(const std::filesystem::path& game_exe,
     if(!pe.valid || pe.coff_timestamp!=kBuildTimestamp || pe.image_size!=kImageSize){
         error="unsupported game build (native hook disabled)";return false;
     }
-    const std::array<std::uint32_t,1> wanted{kSchedulePostLoadHash};
+    // Codeware's independently published ISerializable::Clone address
+    // hash is optional; the existing validated hook remains required.
+    const std::array<std::uint32_t,2> wanted{
+        kSchedulePostLoadHash,kNativeISerializableCloneHash};
     const auto db=read_address_database(
         game_exe.parent_path()/L"cyberpunk2077_addresses.json",
         pe.coff_timestamp,pe.sections,wanted);
@@ -356,6 +365,12 @@ bool get_target_address(const std::filesystem::path& game_exe,
        it->second.rva>=pe.image_size){
         error="serializer native function not in validated .text section";return false;
     }
+    const auto clone=db.matches.find(kNativeISerializableCloneHash);
+    if(clone!=db.matches.end() && clone->second.segment==1 &&
+       clone->second.rva>=pe.sections.text_rva &&
+       clone->second.rva-pe.sections.text_rva<pe.sections.text_size &&
+       clone->second.rva!=it->second.rva)
+        optional_clone_rva=clone->second.rva;
     sections=pe.sections;
     rva=it->second.rva;
     return true;
@@ -380,15 +395,19 @@ bool start_native_resource_stage(
             log<<"Native Ink preview missing color tokens or journal active\n";
             return false;
         }
-        std::uint32_t rva=0;
+        std::uint32_t rva=0,clone_rva=0;
         AddressSections sections{};
         std::string error;
-        if(!get_target_address(game_exe,rva,sections,error)){
+        if(!get_target_address(game_exe,rva,clone_rva,sections,error)){
             log<<"Native Ink preview disabled: "<<error<<"\n";return false;
         }
         s_image_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
         s_text_rva=sections.text_rva;
         s_text_size=sections.text_size;
+        if(s_image_base && clone_rva)
+            s_clone_symbol_resolved.store(
+                executable_address(s_image_base+clone_rva),
+                std::memory_order_release);
         if(!s_image_base ||
            rva>=sections.image_size ||
            !executable_address(s_image_base+rva)){
@@ -505,6 +524,8 @@ std::string native_resource_stage_status() {
            " full_tree_colors="+std::to_string(s_full_tree_colors.load())+
            " full_tree_inspected="+std::to_string(s_full_tree_observed_properties.load())+
            " full_tree_unsupported="+std::to_string(s_full_tree_unsupported.load())+
+           " clone_symbol="+(s_clone_symbol_resolved.load()?"resolved":"unavailable")+
+           " clone_owner_backend=not_wired"+
            " target_resources="+std::to_string(s_targets.load())+
            " preflight_ready="+std::to_string(s_preflight_ready.load())+
            " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+

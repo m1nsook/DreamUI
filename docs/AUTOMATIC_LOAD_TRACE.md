@@ -65,6 +65,11 @@ in-game dev window.
   memory; `unsupported_variant` means at least one native property needs
   a type-aware engine copier. A failed capture retains **no partial tree**.
   Neither outcome proves safe game-side rehydration or an Ink refresh.
+- `clone_symbol=resolved|unavailable`: build-verified address DB discovery
+  of REDengine `ISerializable::Clone` (hash `2601784524`) with a
+  validated executable-code RVA. `clone_owner_backend=not_wired` means
+  DreamUI **never invokes Clone** or retains its returned handle yet;
+  symbol lookup is not a runtime clone test.
 - `last_matched_properties`: validated matching HDRColor properties
   from the most recent target preflight.
 - `preflight_ready`, `preflight_no_styles`, `preflight_missing`, and

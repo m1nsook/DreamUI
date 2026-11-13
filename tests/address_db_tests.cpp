@@ -1,4 +1,5 @@
 #include "dreamui/address_db.hpp"
+#include "dreamui/native_ink_clone.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9,15 +10,18 @@ int main(int argc,char** argv){
     if(argc!=2) return 2;
     auto path=std::filesystem::path(argv[1])/"test_addresses.json";
     const dreamui::AddressSections s{0x1000,0x2000,0x4000,0x1000,0x6000,0x1000,0x9000};
-    const std::array<std::uint32_t,3> needed={0x783C1034u,0xC86F39B7u,0x4A610F64u};
+    const std::array<std::uint32_t,4> needed={0x783C1034u,0xC86F39B7u,0x4A610F64u,
+        dreamui::kNativeISerializableCloneHash};
     auto put=[&](std::string v){std::ofstream o(path,std::ios::binary);o << v;};
     const std::string sample="{\"Linker map timestamp\":\"6ad55daf (Oct 19 2026)\",\"Addresses\":["
        "{\"hash\":\"2017202228\",\"symbol\":\"loader\",\"offset\":\"0003:00000120\"},"
        "{\"hash\":\"3362732471\",\"offset\":\"0001:00000050\"},"
-       "{\"hash\":\"1247874916\",\"offset\":\"0001:00000075\"}]}";
+       "{\"hash\":\"1247874916\",\"offset\":\"0001:00000075\"},"
+       "{\"hash\":\"2601784524\",\"offset\":\"0001:000000A0\"}]}";
     put(sample+std::string(300,' '));
     const auto r=dreamui::read_address_database(path,0x6ad55daf,s,needed);
-    if(!r.valid || r.matches.size()!=3 ||r.matches.at(needed[0]).rva!=0x6120 || r.matches.at(needed[1]).rva!=0x1050){
+    if(!r.valid || r.matches.size()!=4 ||r.matches.at(needed[0]).rva!=0x6120 ||
+       r.matches.at(needed[1]).rva!=0x1050 || r.matches.at(needed[3]).rva!=0x10A0){
         std::cerr<<"lookup failed: "<<r.error<<" found="<<r.matches.size()<<'\n';return 1;
     }
     if(dreamui::read_address_database(path,0x6ad55dae,s,needed).valid) return 1;
