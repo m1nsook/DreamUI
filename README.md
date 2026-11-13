@@ -25,6 +25,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
+- **Automatic experimental native load trace:** in an opt-in source build, capture guarded serializer-stage callback and style preflight counters to `DreamUI-load.log` as the game loads, without Tab or developer commands. No native writes in observation mode; installing a native hook still carries risk.
 - A headless developer command registry/inbox adapted from the owner's DreamUI prototype; supports manual screen-phase labels without an ImGui/DX12 overlay.
 - **Validated theme selection:** `select <theme-id>` chooses from installed `.dream` packages, saves an active-theme preference, and supplies the theme's colors to the guarded native bridge at the next authenticated resource load; not instant switching.
 - Native DreamCatalog model for listing installed themes, version display and choosing a fallback active theme; **no menu widget yet**.
@@ -36,7 +37,7 @@ A game-verified native serializer callback, reliable immediate Ink refresh and i
 
 An [optional HUD Painter exporter](docs/HUDPAINTER_COMPAT.md) can apply `.dream` palettes through HUD Painter in installations that already have it, without making HUD Painter a dependency of DreamUI's ASI.
 
-See [native serializer-stage bridge](docs/NATIVE_SERIALIZER_STAGE.md), [developer commands](docs/DEVELOPER_COMMANDS.md), [native Ink lifecycle implementation](docs/NATIVE_RESOURCE_LIFECYCLE.md), [HUD Painter source research](docs/HUD_PAINTER_REFERENCE.md), [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
+See [native serializer-stage bridge](docs/NATIVE_SERIALIZER_STAGE.md), [automatic load trace](docs/AUTOMATIC_LOAD_TRACE.md), [developer commands](docs/DEVELOPER_COMMANDS.md), [native Ink lifecycle implementation](docs/NATIVE_RESOURCE_LIFECYCLE.md), [HUD Painter source research](docs/HUD_PAINTER_REFERENCE.md), [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
 
 ## Build
 
