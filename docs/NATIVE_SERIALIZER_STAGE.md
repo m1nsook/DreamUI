@@ -282,9 +282,12 @@ verification_failed|verified_and_released|release_failed`, plus
 indicates a successful temporary roundtrip, **not** a retained handle,
 HUD recolor, safe persistent resource lifetime, or a live UI refresh.
 No new persistent resource, source color write, or PostLoad invocation
-is implemented. If a Handle cannot be safely released, DreamUI reports
-`release_failed` and stops the one-shot probe rather than attempting
-unknown free/destructor operations.
+is implemented. If an output aliases any source-owned allocation or its Handle cannot
+be safely released, DreamUI reports `release_failed`, does not invoke
+the destructor, and stops the one-shot probe. This can intentionally
+leave **one native allocation alive until process exit** rather than risk
+freeing the game's original resource. This is a test-only fail-safe,
+**not an acceptable production resource lifecycle**.
 
 References:
 - [Codeware `Raw::ISerializable::Clone`](https://github.com/psiberx/cp2077-codeware/blob/main/src/Red/Scripting.hpp)
