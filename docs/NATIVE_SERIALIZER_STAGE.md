@@ -108,41 +108,56 @@ before such a runtime difference can erase the source data, but **that
 ordering is still unverified in the running game**.
 
 
-## Authenticated restoration journal (source milestone)
+## Three native palette targets in one atomic load-stage transaction
 
-The next implementation introduces an explicit `InkLoadJournal`, recording
-*every* matching `MainColors.Red` four-float preimage, expected changed value,
-style index, property index and native Variant allocation identity.
-It also stores the ISerializable serialized instance ID (`+0x28`).
+Rather than limiting the first standalone palette to the color key
+`MainColors.Red`, the experimental stage now applies all three
+verified DreamUI semantic mappings **atomically**:
 
-`restore_loaded_ink_color` is callable **only from an authenticated native
-resource callback containing the same live, strongly-owned resource**.
-Before restoring a single color, it validates all the current property
-hashes, resource identity, native HDRColor RTTI, external storage pointers
-and exact applied float values. It does not overwrite changes made by other
-mods. On a partial restore failure it attempts to roll back every touched
-property to its applied value; a failed restore never silently discards the
-journal. On success, the owning callback clears the journal.
+| .dream token | Native inkStyleProperty |
+| --- | --- |
+| `text.primary` | `MainColors.Red` |
+| `text.secondary` | `MainColors.PanelBlue` |
+| `selection.active` | `MainColors.ActiveYellow` |
 
-An optional `ink-apply` or `ink-restore` developer command merely records
-intent in an atomic flag. The worker thread NEVER writes to the game.
-The serializer callback can apply on a *future* load or restore when the
-**same instance** is passed to it again. **This is not a live-refresh
-mechanism**, and no game callback has been observed in our clean install yet.
-An Ink resource may not be scheduled a second time, so a restore request can
-remain pending indefinitely. Do not advertise these commands as reliable
-instantaneous theme switching.
+All three native properties must be found and have valid HDRColor
+Variants **before any write**. If one is missing, no colors are
+changed. A partial failure at the third property rolls back all three,
+including the property which returned a failed write after modifying
+memory. The full preimage is retained in an optional generation-bound
+journal for a later authenticated restore. Each native color's peak
+brightness and alpha are preserved.
 
-The native bridge is still compiled only when the experimental build
-option is enabled and additionally gated by a per-install marker. The
-released alpha.8 is unaffected.
+## Why a live refresh needs an owning style snapshot
 
-## ABI/threading and release blockers
+A source-level review of **the owner's HUD Painter 1.4.1 ZIP** and
+Codeware 1.21.2 establishes:
 
-The CODE-level callback ABI and type metadata have been checked against
-the RED4ext SDK and Codeware source. But the user's separate clean Steam
-installation has not exercised the new hook yet. A passing mock test does
-not validate the game's serializer thread affinity or guarantee the UI will
-consume the changed property. Before a public working release we need
-a verified engine-owned rescheduling/refresh mechanism and an immediate
-safe restoration route for a retained game resource.
+1. In HUD Painter `HudPainterStorage.reds`, `OnStyleLoaded` copies
+   the engine's initial `resource.styles` into a separate owned
+   `defaultStyles` array **before post-load finalization**.
+2. For interactive preset changes, HUD Painter obtains a genuine game
+   resource handle with `ResourceDepot.LoadResource`, assigns the copied
+   `defaultStyles` back into `resource.styles`, replaces selected native
+   `Variant/HDRColor` fields, then calls `RefreshResource()`.
+3. `RefreshResource()` is **not an independent native engine function
+   that we must locate by name**. In Codeware's REDscript it delegates
+   to `ISerializable.ProcessPostLoad()`. The C++ implementation calls
+   `ISerializable::PostLoad({disablePreInitialization})`, a virtual
+   method in the RED4ext.SDK vtable at offset `0x28`.
+
+References:
+- https://github.com/psiberx/cp2077-codeware/blob/main/scripts/Scripting/ISerializable.reds
+- https://github.com/psiberx/cp2077-codeware/blob/main/src/App/Scripting/ISerializableEx.hpp
+- https://github.com/wopss/RED4ext.SDK/blob/master/include/RED4ext/ISerializable.hpp
+
+**Crucial:** merely invoking `PostLoad` on the style resource with
+`styles=0` will not recreate color properties. DreamUI needs a genuine
+engine-allocated, lifetime-safe copy of the styles/Variants and a
+game-owned callback context **before** it can safely issue an
+interactive refresh or a reliable immediate restoration. The initial
+load-stage patch needs no extra refresh call: the engine's own normal
+post-load work follows it. We do not invoke PostLoad twice.
+
+This work remains part of the standalone ASI and does not import
+Codeware or HUD Painter into the game.

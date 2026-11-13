@@ -47,18 +47,27 @@ bool same_color(const HdrColor& a,const HdrColor& b) {
 }
 } // namespace
 
-InkLoadPatchResult patch_loaded_ink_color(
+InkLoadPatchResult patch_loaded_ink_palette(
     const MemoryRead& read,const MemoryWrite& write,
     std::uint64_t resource,std::uint64_t path,
-    std::string_view property,Rgb selected,
+    std::span<const InkPaletteEntry> targets,
     InkLoadJournal* journal) {
     InkLoadPatchResult out;
     if(journal && journal->active()) {
         out.status=InkLoadPatchStatus::JournalOccupied;return out;
     }
     if(!read || !write || resource<0x10000 || !path ||
-       property.empty() || property.size()>128)
+       targets.empty() || targets.size()>16)
         return out;
+    std::array<std::uint64_t,16> hashes{};
+    std::array<bool,16> found{};
+    for(std::size_t i=0;i<targets.size();++i) {
+        const auto property=targets[i].native_property;
+        if(property.empty() || property.size()>128)return out;
+        const auto hash=cname_hash(property);
+        for(std::size_t j=0;j<i;++j)if(hashes[j]==hash)return out;
+        hashes[i]=hash;
+    }
     std::array<std::uint8_t,0x50> header{};
     if(!read_at(read,resource,0,header.data(),header.size()) ||
        u64(header.data(),0x30)!=path)
@@ -71,7 +80,6 @@ InkLoadPatchResult patch_loaded_ink_color(
     if(!styles.size) {out.status=InkLoadPatchStatus::NoStyles;return out;}
 
     std::array<Saved,32> snapshots{};
-    const auto target=cname_hash(property);
     for(std::uint32_t si=0;si<styles.size;++si) {
         std::array<std::uint8_t,0x20> style{};
         if(!read_at(read,styles.ptr,static_cast<std::uint64_t>(si)*0x20,
@@ -82,7 +90,12 @@ InkLoadPatchResult patch_loaded_ink_color(
             std::array<std::uint8_t,0x20> item{};
             if(!read_at(read,properties.ptr,static_cast<std::uint64_t>(pi)*0x20,
                         item.data(),item.size()))return out;
-            if(u64(item.data(),0)!=target)continue;
+            const auto property_hash=u64(item.data(),0);
+            auto hit=std::find(hashes.begin(),hashes.begin()+targets.size(),property_hash);
+            if(hit==hashes.begin()+targets.size())continue;
+            const auto index=static_cast<std::size_t>(hit-hashes.begin());
+            found[index]=true;
+            const Rgb selected=targets[index].theme_color;
             if(out.matched==snapshots.size()) {out.status=InkLoadPatchStatus::InvalidProperty;return out;}
             const auto type=u64(item.data(),0x8);
             const auto address=u64(item.data(),0x10);
@@ -111,7 +124,12 @@ InkLoadPatchResult patch_loaded_ink_color(
             if(!finite_hdr(desired)) {
                 out.status=InkLoadPatchStatus::InvalidProperty;return out;
             }
-            snapshots[out.matched++]={address,current,desired,type,target,si,pi};
+            snapshots[out.matched++]={address,current,desired,type,property_hash,si,pi};
+        }
+    }
+    for(std::size_t i=0;i<targets.size();++i) {
+        if(!found[i]) {
+            out.status=InkLoadPatchStatus::NoMatchingProperty;return out;
         }
     }
     if(out.matched==0) {
@@ -170,6 +188,14 @@ InkLoadPatchResult patch_loaded_ink_color(
     }
     out.status=InkLoadPatchStatus::Applied;
     return out;
+}
+
+InkLoadPatchResult patch_loaded_ink_color(
+    const MemoryRead& read,const MemoryWrite& write,
+    std::uint64_t resource,std::uint64_t path,
+    std::string_view property,Rgb selected,InkLoadJournal* journal) {
+    const std::array<InkPaletteEntry,1> one{{{property,selected}}};
+    return patch_loaded_ink_palette(read,write,resource,path,one,journal);
 }
 
 // Do not invoke outside an authenticated engine-owned callback. This

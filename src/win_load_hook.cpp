@@ -30,7 +30,12 @@ using StageFn=void (__fastcall *)(std::uint64_t,std::uint8_t,std::uint64_t,
 StageFn s_original=nullptr;
 std::atomic_bool s_installed{false};
 std::atomic_bool s_enabled{false};
-std::atomic<std::uint32_t> s_rgb{0};
+// Written once before installing the hook, then immutable during engine callbacks.
+std::array<InkPaletteEntry,3> s_palette{{
+    {"MainColors.Red",{}},
+    {"MainColors.PanelBlue",{}},
+    {"MainColors.ActiveYellow",{}}
+}};
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
@@ -121,10 +126,6 @@ void handle_serializer(void* serializer) {
     const MemoryWrite write=[](std::uint64_t a,const void* d,std::size_t n){
         return safe_write(a,d,n);
     };
-    const auto packed=s_rgb.load(std::memory_order_relaxed);
-    const Rgb target{static_cast<std::uint8_t>((packed>>16)&255),
-                     static_cast<std::uint8_t>((packed>>8)&255),
-                     static_cast<std::uint8_t>(packed&255)};
     for(std::uint32_t i=0;i<count;++i) {
         std::array<std::uint8_t,0x10> handle{};
         if(!safe_read(handles+static_cast<std::uint64_t>(i)*0x10,
@@ -175,8 +176,8 @@ void handle_serializer(void* serializer) {
             continue;
         }
         if(intent!=1 || s_journal.active())continue;
-        const auto result=patch_loaded_ink_color(
-            read,write,object,path,"MainColors.Red",target,&s_journal);
+        const auto result=patch_loaded_ink_palette(
+            read,write,object,path,s_palette,&s_journal);
         if(result.status==InkLoadPatchStatus::Applied) {
             ++s_applied;
             s_journal_active.store(true,std::memory_order_release);
@@ -259,8 +260,16 @@ bool start_native_resource_stage(
         // Hard opt-in. Ordinary builds and normal installs are untouched.
         if(!std::filesystem::is_regular_file(home/L"dev"/L"native-ink-preview.enable"))
             return false;
-        const auto it=theme.colors.find("text.primary");
-        if(it==theme.colors.end()){log<<"Native Ink preview missing text.primary\n";return false;}
+        constexpr std::array<std::string_view,3> tokens{
+            "text.primary","text.secondary","selection.active"};
+        for(std::size_t i=0;i<tokens.size();++i) {
+            const auto found=theme.colors.find(std::string(tokens[i]));
+            if(found==theme.colors.end()) {
+                log<<"Native Ink preview missing theme token "<<tokens[i]<<"\n";
+                return false;
+            }
+            s_palette[i].theme_color=found->second;
+        }
         std::uint32_t rva=0;
         AddressSections sections{};
         std::string error;
@@ -276,9 +285,6 @@ bool start_native_resource_stage(
             log<<"Native Ink preview disabled: invalid executable hook address\n";
             return false;
         }
-        const auto rgb=it->second;
-        s_rgb.store((static_cast<std::uint32_t>(rgb.r)<<16) |
-                    (static_cast<std::uint32_t>(rgb.g)<<8) | rgb.b);
         if(MH_Initialize()!=MH_OK){
             log<<"Native Ink preview disabled: hook library init failed\n";return false;
         }
@@ -295,7 +301,7 @@ bool start_native_resource_stage(
         s_intent.store(1,std::memory_order_release);
         s_enabled.store(true,std::memory_order_release);
         log<<"Experimental standalone Ink serializer stage enabled. "
-               "Writes only verified existing HDRColor payloads; no DX12 hooks.\n";
+               "Writes up to 3 verified native palette properties; no DX12 hooks.\n";
         return true;
     }catch(...){
         log<<"Native Ink preview disabled after initialization exception\n";

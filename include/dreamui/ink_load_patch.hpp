@@ -5,6 +5,7 @@
 #include <array>
 #include <functional>
 #include <string_view>
+#include <span>
 
 namespace dreamui {
 
@@ -65,6 +66,22 @@ struct InkLoadPatchResult {
 // existing, verified native HDRColor allocation before resource finalization.
 // Only invoke during an authenticated engine serialization callback; never
 // from the Tab/file-command worker.
+
+struct InkPaletteEntry {
+    std::string_view native_property;
+    Rgb theme_color;
+};
+// Atomically patch up to 16 distinct named native HDRColor properties.
+// All requested names must exist and pass verification before ANY write;
+// this avoids mixed palettes if a target is absent from a game build.
+InkLoadPatchResult patch_loaded_ink_palette(
+    const MemoryRead& reader,
+    const MemoryWrite& writer,
+    std::uint64_t style_resource,
+    std::uint64_t resource_path_hash_expected,
+    std::span<const InkPaletteEntry> targets,
+    InkLoadJournal* journal = nullptr);
+
 InkLoadPatchResult patch_loaded_ink_color(
     const MemoryRead& reader,
     const MemoryWrite& writer,

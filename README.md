@@ -21,7 +21,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible RGB apply/restore logic.
 - **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested.
-- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, HDRColor load-stage transactions, full preimage journal, guarded same-instance restoration, and rollback. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and instantaneous restore are verified.
+- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, atomic three-property HDRColor load-stage transactions, journaled rollback, and guarded exact-instance restoration. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and restore are verified.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
@@ -31,7 +31,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 
 ## Not implemented
 
-An **in-game verified** standalone color change, immediately applied/restored themes, safe UI refresh, minimap/world-map recoloring and the native main-menu tile. The optional serializer hook implements guarded C++ memory writes but has not been validated in-game. No externally installed framework is required by DreamUI. On the owner's separate clean Steam install, the existing loader successfully loads alpha.8 from `bin/x64/plugins/`. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
+Actual engine resource handles, Ink reading/writing, theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
 
 An [optional HUD Painter exporter](docs/HUDPAINTER_COMPAT.md) can apply `.dream` palettes through HUD Painter in installations that already have it, without making HUD Painter a dependency of DreamUI's ASI.
 
