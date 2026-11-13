@@ -34,7 +34,9 @@ jobs:
       - name: Validate requested prerelease tag
         shell: pwsh
         run: |
-          if ($env:VERSION -notmatch '^v\d+\.\d+\.\d+-(alpha|beta|rc)\.\d+
+          if ($env:VERSION -notmatch '^v\d+\.\d+\.\d+-(alpha|beta|rc)\.\d+$') {
+            throw "Version must look like v0.1.0-alpha.2"
+          }
       - name: Unit tests
         shell: pwsh
         run: |
@@ -57,7 +59,7 @@ jobs:
           )
           foreach ($flag in $requiredFlags) {
             if (!(Select-String -Path "build/CMakeCache.txt" -SimpleMatch -Pattern $flag -Quiet)) {
-              throw "Unsafe or incomplete prerelease CMake profile: $flag"
+              throw "Unsafe prerelease CMake profile: $flag"
             }
           }
           cmake --build build --config Release
@@ -104,67 +106,4 @@ jobs:
           }
           $archive = "dist/DreamUI-$env:VERSION-win64-test.zip"
           gh release create "$env:VERSION" "$archive" "$archive.sha256" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --prerelease --title "DreamUI $env:VERSION (standalone native Ink load diagnostics)" --notes-file "docs/TESTING.md"
-          if ($LASTEXITCODE -ne 0) { throw "GitHub prerelease publication failed" }
-) {
-            throw "Version must look like v0.1.0-alpha.9"
-          }
-          $versionLine = "kDreamUIVersion = " + [char]34 + $env:VERSION + [char]34
-          if (!(Select-String -Path "include/dreamui/control_hub.hpp" -SimpleMatch -Pattern $versionLine -Quiet)) {
-            throw "Compiled DreamUI version constant does not match prerelease tag"
-          }
-      - name: Unit tests
-        shell: pwsh
-        run: |
-          python -m unittest discover -s tests -p 'test_*.py' -v
-          if ($LASTEXITCODE -ne 0) { throw "Python tests failed" }
-      - name: Pack default .dream theme
-        shell: pwsh
-        run: |
-          python tools/dreamtool.py pack themes/Default dist/Default.dream
-          if ($LASTEXITCODE -ne 0) { throw "Theme packing failed" }
-      - name: Build Win64 .asi
-        shell: pwsh
-        run: |
-          cmake -S . -B build -A x64 -DBUILD_TESTING=ON
-          if ($LASTEXITCODE -ne 0) { throw "Configure failed" }
-          cmake --build build --config Release
-          if ($LASTEXITCODE -ne 0) { throw "ASI build failed" }
-          ctest --test-dir build -C Release --output-on-failure
-          if ($LASTEXITCODE -ne 0) { throw "Native tests failed" }
-      - name: Assemble install-path test ZIP and SHA256
-        shell: pwsh
-        run: |
-          $root = "dist/staging"
-          New-Item -ItemType Directory -Force "$root/bin/x64/plugins" | Out-Null
-          New-Item -ItemType Directory -Force "$root/dreamui/themes" | Out-Null
-          Copy-Item "build/Release/DreamUI.asi" "$root/bin/x64/plugins/DreamUI.asi"
-          Copy-Item "dist/Default.dream" "$root/dreamui/themes/Default.dream"
-          Copy-Item "docs/TESTING.md" "$root/README-TESTING.md"
-          $archive = "DreamUI-$env:VERSION-win64-test.zip"
-          $target = "dist/$archive"
-          Compress-Archive -Path "$root/*" -DestinationPath $target -Force
-          $hash = (Get-FileHash -Algorithm SHA256 $target).Hash.ToLowerInvariant()
-          "$hash  $archive" | Set-Content "dist/$archive.sha256" -Encoding Ascii
-          if (!(Test-Path $target)) { throw "Test ZIP missing" }
-          Write-Host "Created $target | SHA256 $hash"
-      - name: Keep tested install package as workflow artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: DreamUI-${{ env.VERSION }}-test
-          path: |
-            dist/DreamUI-*-win64-test.zip
-            dist/DreamUI-*-win64-test.zip.sha256
-          if-no-files-found: error
-      - name: Publish GitHub prerelease (never stable/latest)
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view "$env:VERSION" --repo "$env:GITHUB_REPOSITORY" *> $null
-          if ($LASTEXITCODE -eq 0) {
-            Write-Host "Prerelease $env:VERSION already exists; skipping duplicate."
-            exit 0
-          }
-          $archive = "dist/DreamUI-$env:VERSION-win64-test.zip"
-          gh release create "$env:VERSION" "$archive" "$archive.sha256" --repo "$env:GITHUB_REPOSITORY" --target "$env:GITHUB_SHA" --prerelease --title "DreamUI $env:VERSION (on-demand Tab Ink probe)" --notes-file "docs/TESTING.md"
           if ($LASTEXITCODE -ne 0) { throw "GitHub prerelease publication failed" }
