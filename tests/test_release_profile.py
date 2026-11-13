@@ -38,6 +38,9 @@ class ReleaseProfileTests(unittest.TestCase):
         self.assertIn('Release ZIP must never contain native opt-in marker files', workflow)
         self.assertIn('Copy-Item "dist/Default.dream"', workflow)
         self.assertIn('Copy-Item "build/Release/DreamUI.asi"', workflow)
+        self.assertEqual(workflow.count("- name: Unit tests"), 1)
+        self.assertEqual(workflow.count("- name: Publish GitHub prerelease"), 1)
+        self.assertEqual(workflow.count("gh release create"), 1)
 
 
 if __name__ == "__main__":
