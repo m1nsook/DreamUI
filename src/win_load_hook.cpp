@@ -177,14 +177,13 @@ void handle_serializer(void* serializer) {
             continue;
         }
         if(intent!=1 || s_journal.active())continue;
-        std::array<InkPaletteEntry,3> theme_palette{};
-        {
-            std::unique_lock guard(s_palette_lock,std::try_to_lock);
-            if(!guard.owns_lock())continue;
-            theme_palette=s_palette;
-        }
+        // Keep the palette lock through the transaction AND journal state
+        // update. Otherwise a console theme switch could race after the
+        // snapshot but before the game callback marks the journal active.
+        std::unique_lock palette_guard(s_palette_lock,std::try_to_lock);
+        if(!palette_guard.owns_lock())continue;
         const auto result=patch_loaded_ink_palette(
-            read,write,object,path,theme_palette,&s_journal);
+            read,write,object,path,s_palette,&s_journal);
         if(result.status==InkLoadPatchStatus::Applied) {
             ++s_applied;
             s_journal_active.store(true,std::memory_order_release);
