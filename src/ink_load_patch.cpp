@@ -33,6 +33,7 @@ struct Saved {
     HdrColor after{};
     std::uint64_t type=0,property_hash=0;
     std::uint32_t style_index=0,property_index=0;
+    std::uint64_t style_id=0,style_state=0;
 };
 bool is_color_type(const MemoryRead& r,std::uint64_t type) {
     if(type<0x10000 || (type&1))return false;
@@ -130,7 +131,8 @@ PalettePlan prepare_palette(const MemoryRead& read,
             if(!finite_hdr(desired)) {
                 p.failure=InkLoadPatchStatus::InvalidProperty;return p;
             }
-            snapshots[p.matched++]={address,current,desired,type,property_hash,si,pi};
+            snapshots[p.matched++]={address,current,desired,type,property_hash,si,pi,
+                                     u64(style.data(),0),u64(style.data(),8)};
         }
     }
     for(std::size_t i=0;i<targets.size();++i) {
@@ -148,8 +150,27 @@ PalettePlan prepare_palette(const MemoryRead& read,
 
 InkLoadInspection inspect_loaded_ink_palette(
     const MemoryRead& read,std::uint64_t resource,std::uint64_t path,
-    std::span<const InkPaletteEntry> targets) {
+    std::span<const InkPaletteEntry> targets,
+    InkOwnedColorPreimage* owned_preimage) {
+    // A failed inspection never leaves a stale or partially valid capture.
+    if(owned_preimage)owned_preimage->clear();
     const auto plan=prepare_palette(read,resource,path,targets,true);
+    if(owned_preimage && plan.ready) {
+        owned_preimage->resource_path_hash=path;
+        owned_preimage->resource_instance_id=plan.resource_id;
+        owned_preimage->style_count=plan.styles;
+        owned_preimage->entry_count=plan.matched;
+        for(std::uint32_t i=0;i<plan.matched;++i) {
+            const auto& s=plan.snapshots[i];
+            // Copy value and CName identities only. Never retain s.address
+            // or s.type: both are borrowed native pointers which can expire
+            // when the serializer completes post-load processing.
+            owned_preimage->entries[i]={
+                s.style_id,s.style_state,s.property_hash,
+                s.style_index,s.property_index,s.before,s.after
+            };
+        }
+    }
     return {plan.ready,plan.failure,plan.matched,plan.styles};
 }
 
