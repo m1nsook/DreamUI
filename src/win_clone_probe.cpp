@@ -200,6 +200,7 @@ public:
         if(!read_memory(clone.ref_count,refs.data(),sizeof(refs)) ||
            !refs[0] || !refs[1])return false;
         StyleArray cloned{};
+        clone_owner_address_=clone.instance;
         if(!read_style_array(clone.instance,cloned) ||
            cloned.count!=source_styles_.count ||
            cloned.data==source_styles_.data)return false;
@@ -251,12 +252,37 @@ public:
     }
     bool release_failed() const noexcept {return release_failed_;}
 private:
-    // The source was already authenticated and fully HDRColor-typed.
-    // This proves ownership of every nested array and external Variant
-    // slot that could be destructed by ~inkStyleResource.
+    // Source was authenticated and fully HDRColor-typed. Check the
+    // ownership-bearing arrays and nested Variant storage. Resource Ref
+    // elements may share referenced assets intentionally; their reference
+    // management remains the responsibility of engine-native Clone.
     bool prove_deep_independence(const StyleArray& clone) const noexcept {
         if(!source_snapshot_.complete() ||
            source_snapshot_.styles.size()!=source_styles_.count)return false;
+        std::array<std::uint8_t,0x80> src_head{},clone_head{};
+        if(!read_memory(source_.instance,src_head.data(),src_head.size()) ||
+           !read_memory(clone_owner_address_,clone_head.data(),clone_head.size()))
+            return false;
+        // styles, themes, overrides and styleImports are all DynArrays.
+        // Even empty-but-allocated arrays must have independent buffers
+        // because the native destructor frees on capacity, not count.
+        constexpr std::array<std::uint32_t,4> offsets{0x40,0x50,0x60,0x70};
+        constexpr std::array<std::uint32_t,4> max_counts{32,128,32,128};
+        for(std::size_t i=0;i<offsets.size();++i) {
+            const auto o=offsets[i];
+            const auto src_ptr=u64(src_head.data(),o);
+            const auto dst_ptr=u64(clone_head.data(),o);
+            const auto src_cap=u32(src_head.data(),o+8);
+            const auto dst_cap=u32(clone_head.data(),o+8);
+            const auto src_count=u32(src_head.data(),o+12);
+            const auto dst_count=u32(clone_head.data(),o+12);
+            if(src_count>max_counts[i] || dst_count!=src_count ||
+               src_count>src_cap || dst_count>dst_cap)return false;
+            if(src_cap || dst_cap) {
+                if(src_ptr<0x10000 || dst_ptr<0x10000 ||
+                   src_ptr==dst_ptr)return false;
+            }
+        }
         for(std::uint32_t si=0;si<source_styles_.count;++si) {
             std::array<std::uint8_t,0x20> source_style{},clone_style{};
             if(!read_memory(source_styles_.data+std::uint64_t(si)*0x20,
@@ -266,11 +292,16 @@ private:
             const auto count=u32(source_style.data(),0x1c);
             if(count!=u32(clone_style.data(),0x1c) ||
                count!=source_snapshot_.styles[si].property_count)return false;
-            if(!count)continue;
+            const auto src_cap=u32(source_style.data(),0x18);
+            const auto dst_cap=u32(clone_style.data(),0x18);
+            if(count>src_cap || count>dst_cap)return false;
             const auto source_props=u64(source_style.data(),0x10);
             const auto clone_props=u64(clone_style.data(),0x10);
-            if(source_props<0x10000 || clone_props<0x10000 ||
-               source_props==clone_props)return false;
+            if(src_cap || dst_cap) {
+                if(source_props<0x10000 || clone_props<0x10000 ||
+                   source_props==clone_props)return false;
+            }
+            if(!count)continue;
             for(std::uint32_t pi=0;pi<count;++pi) {
                 std::array<std::uint8_t,0x20> a{},b{};
                 if(!read_memory(source_props+std::uint64_t(pi)*0x20,
@@ -295,6 +326,7 @@ private:
     WinInkCloneProbeConfig cfg_{};
     WinInkCloneProbeResult& result_;
     StyleArray source_styles_{};
+    std::uint64_t clone_owner_address_=0;
     InkOwnedStyleTree source_snapshot_{};
     bool safe_to_release_=false;
     bool release_failed_=false;
