@@ -47,7 +47,7 @@ class ReleaseProfileTests(unittest.TestCase):
 
     def test_package_never_includes_unsafe_markers(self):
         workflow = (ROOT / ".github/workflows/release-testing.yml").read_text(encoding="utf-8")
-        self.assertIn('$root/dreamui/dev', workflow)
+        self.assertIn('$staging/dreamui/dev', workflow)
         self.assertIn('Release ZIP must never contain native opt-in marker files', workflow)
         self.assertIn('Copy-Item "dist/Default.dream"', workflow)
         self.assertIn('Copy-Item "build/Release/DreamUI.asi"', workflow)
