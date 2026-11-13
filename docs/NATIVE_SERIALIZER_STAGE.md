@@ -54,13 +54,28 @@ including the write that may have *partially succeeded*.
 - Uses MinHook **statically linked** under its BSD-2-Clause license;
   no DLL or installed framework is required
 
-**The bridge is not turned on in regular builds.** Two gates must be
-satisfied:
+**The bridge is not turned on in regular builds.** It now has two
+separately gated modes:
 
 1. Build with `-DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON` (Windows CI
-   compiles this configuration; normal local builds default OFF)
-2. Explicitly place a marker file at
-   `dreamui/dev/native-ink-preview.enable`
+   compiles this configuration; normal local builds default OFF).
+2. Place `dreamui/dev/native-ink-preview.enable` under the game's root.
+   This installs the experimental hook in **read-only observation** mode.
+   It checks only strongly held `main_colors.inkstyle` resources using
+   the same complete native Variant validation as the patcher, without
+   invoking a memory writer. Run `status` through the existing developer
+   command inbox to see `target_resources`, `preflight_ready`,
+   `preflight_no_styles`, `preflight_missing` and `preflight_rejected`.
+3. **Only when intentionally testing native mutation**, ALSO place
+   `dreamui/dev/native-ink-write.enable` before game startup.
+   This enables the pre-existing load-stage apply/restore intent path.
+   Neither marker is re-read at runtime; removing or adding one requires
+   a game restart. Do not use write mode on a normal playthrough.
+
+The read-only mode never calls `MemoryWrite`, but **installing a native
+function hook is still invasive**: a wrong callback ABI, build fingerprint,
+or hook ordering could crash the process. Observation is not proof of a
+fully safe hook, UI refresh, or stable native recoloring.
 
 There is **no distributed executable with this feature enabled yet**.
 The current public alpha.8 remains read-only.
@@ -78,10 +93,11 @@ the desired game screen. Critical remaining work before public release:
   parallel resource-postload jobs. Current hook uses its own
   non-blocking reentrancy guard and never writes from Tab worker.
 - Verify the color actually propagates to the native Ink widgets.
-- Implement a safe game-driven `RefreshResource` call and **live restore
-  path**. The current stage transaction rolls back write failures but
-  does not implement interactive restoration of successfully changed
-  resources.
+- Implement a safe game-driven `RefreshResource` call and **interactive
+  restoration**. A generation-bound restoration journal now exists
+  for successfully changed resources, but restoration can run only if
+  the SAME authenticated serializer instance returns in a future
+  callback. This is not a live UI refresh or a guaranteed restore.
 - Validate compatibility and fail-closed disabling when game updates
   replace the known symbol layout.
 
@@ -177,3 +193,22 @@ Theme switching is refused if a native restoration journal is still
 active. The preference stores only a validated theme ID, not any
 resource address or arbitrary file path. Neither the preference
 nor the console worker directly changes live game memory.
+
+## Inspecting the native load path on a clean installation
+
+The preflight is deliberately conservative. A `preflight_ready` count
+greater than zero means a matching, strongly-held serializer resource
+contained the three expected typed HDRColor properties, with valid native
+values and a nonzero instance ID, when the hook inspected it. It does
+**not** mean colors were written or propagated to on-screen widgets.
+
+`preflight_no_styles` means the matching resource had no direct styles
+at that point in its lifecycle. `preflight_missing` means at least one
+named target could not be found. `preflight_rejected` means metadata,
+memory, resource identity, or a target HDRColor failed validation.
+`target_resources` counts only the exact `main_colors.inkstyle` resource,
+while `candidates` counts every type-validated inkStyleResource.
+
+Use a dedicated test installation, collect `dreamui/logs/DreamUI-dev.log`
+after running `status`, and leave `native-ink-write.enable` absent.
+No other mod framework or asset is bundled or required by DreamUI.

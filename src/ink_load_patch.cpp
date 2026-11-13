@@ -45,7 +45,115 @@ bool is_color_type(const MemoryRead& r,std::uint64_t type) {
 bool same_color(const HdrColor& a,const HdrColor& b) {
     return std::memcmp(&a,&b,sizeof(HdrColor))==0;
 }
+// Shared validation for the read-only serializer preflight and the real
+// native load-stage transaction. A successful preflight never writes memory.
+struct PalettePlan {
+    bool ready=false;
+    InkLoadPatchStatus failure=InkLoadPatchStatus::InvalidResource;
+    std::uint32_t matched=0;
+    std::uint32_t styles=0;
+    std::uint64_t resource_id=0;
+    std::array<Saved,32> snapshots{};
+};
+PalettePlan prepare_palette(const MemoryRead& read,
+                            std::uint64_t resource,std::uint64_t path,
+                            std::span<const InkPaletteEntry> targets,
+                            bool require_id) {
+    PalettePlan p{};
+    if(!read || resource<0x10000 || !path ||
+       targets.empty() || targets.size()>16)
+        return p;
+    std::array<std::uint64_t,16> hashes{};
+    std::array<bool,16> found{};
+    for(std::size_t i=0;i<targets.size();++i) {
+        const auto property=targets[i].native_property;
+        if(property.empty() || property.size()>128)return p;
+        const auto hash=cname_hash(property);
+        for(std::size_t j=0;j<i;++j)if(hashes[j]==hash)return p;
+        hashes[i]=hash;
+    }
+    std::array<std::uint8_t,0x50> header{};
+    if(!read_at(read,resource,0,header.data(),header.size()) ||
+       u64(header.data(),0x30)!=path)
+        return p;
+
+    const auto resource_id=u64(header.data(),0x28);
+    if(require_id && !resource_id)return p; // verified serializer ID required
+    p.resource_id=resource_id;
+    Array styles{};
+    if(!array_at(header.data(),0x40,32,styles))return p;
+    p.styles=styles.size;
+    if(!styles.size) {p.failure=InkLoadPatchStatus::NoStyles;return p;}
+
+    auto& snapshots=p.snapshots;
+    for(std::uint32_t si=0;si<styles.size;++si) {
+        std::array<std::uint8_t,0x20> style{};
+        if(!read_at(read,styles.ptr,static_cast<std::uint64_t>(si)*0x20,
+                    style.data(),style.size()))return p;
+        Array properties{};
+        if(!array_at(style.data(),0x10,1024,properties))return p;
+        for(std::uint32_t pi=0;pi<properties.size;++pi) {
+            std::array<std::uint8_t,0x20> item{};
+            if(!read_at(read,properties.ptr,static_cast<std::uint64_t>(pi)*0x20,
+                        item.data(),item.size()))return p;
+            const auto property_hash=u64(item.data(),0);
+            auto hit=std::find(hashes.begin(),hashes.begin()+targets.size(),property_hash);
+            if(hit==hashes.begin()+targets.size())continue;
+            const auto index=static_cast<std::size_t>(hit-hashes.begin());
+            found[index]=true;
+            const Rgb selected=targets[index].theme_color;
+            if(p.matched==snapshots.size()) {p.failure=InkLoadPatchStatus::InvalidProperty;return p;}
+            const auto type=u64(item.data(),0x8);
+            const auto address=u64(item.data(),0x10);
+            if(!is_color_type(read,type) || address<0x10000 || (address&15)) {
+                p.failure=InkLoadPatchStatus::InvalidProperty;return p;
+            }
+            HdrColor current{};
+            if(!read_at(read,address,0,&current,sizeof(current)) ||
+               !finite_hdr(current)) {
+                p.failure=InkLoadPatchStatus::InvalidProperty;return p;
+            }
+            for(std::uint32_t i=0;i<p.matched;++i) {
+                if(snapshots[i].address==address) {
+                    p.failure=InkLoadPatchStatus::InvalidProperty;return p;
+                }
+            }
+            // Preserve the native property's existing HDR peak and alpha.
+            // This is an SDR authoring preview, not calibrated HDR transfer.
+            const auto peak=std::max({current.red,current.green,current.blue});
+            if(!(peak>0.f) || peak>65504.f) {
+                p.failure=InkLoadPatchStatus::InvalidProperty;return p;
+            }
+            const float scale=peak/255.0f;
+            HdrColor desired{selected.r*scale,selected.g*scale,
+                             selected.b*scale,current.alpha};
+            if(!finite_hdr(desired)) {
+                p.failure=InkLoadPatchStatus::InvalidProperty;return p;
+            }
+            snapshots[p.matched++]={address,current,desired,type,property_hash,si,pi};
+        }
+    }
+    for(std::size_t i=0;i<targets.size();++i) {
+        if(!found[i]) {
+            p.failure=InkLoadPatchStatus::NoMatchingProperty;return p;
+        }
+    }
+    if(p.matched==0) {
+        p.failure=InkLoadPatchStatus::NoMatchingProperty;return p;
+    }
+    p.ready=true;
+    return p;
+}
 } // namespace
+
+InkLoadInspection inspect_loaded_ink_palette(
+    const MemoryRead& read,std::uint64_t resource,std::uint64_t path,
+    std::span<const InkPaletteEntry> targets) {
+    const auto plan=prepare_palette(read,resource,path,targets,true);
+    return {plan.ready,plan.failure,plan.matched,plan.styles};
+}
+
+
 
 InkLoadPatchResult patch_loaded_ink_palette(
     const MemoryRead& read,const MemoryWrite& write,
@@ -56,85 +164,12 @@ InkLoadPatchResult patch_loaded_ink_palette(
     if(journal && journal->active()) {
         out.status=InkLoadPatchStatus::JournalOccupied;return out;
     }
-    if(!read || !write || resource<0x10000 || !path ||
-       targets.empty() || targets.size()>16)
-        return out;
-    std::array<std::uint64_t,16> hashes{};
-    std::array<bool,16> found{};
-    for(std::size_t i=0;i<targets.size();++i) {
-        const auto property=targets[i].native_property;
-        if(property.empty() || property.size()>128)return out;
-        const auto hash=cname_hash(property);
-        for(std::size_t j=0;j<i;++j)if(hashes[j]==hash)return out;
-        hashes[i]=hash;
-    }
-    std::array<std::uint8_t,0x50> header{};
-    if(!read_at(read,resource,0,header.data(),header.size()) ||
-       u64(header.data(),0x30)!=path)
-        return out;
-
-    const auto resource_id=u64(header.data(),0x28);
-    if(journal && !resource_id)return out; // verified serializer ID required
-    Array styles{};
-    if(!array_at(header.data(),0x40,32,styles))return out;
-    if(!styles.size) {out.status=InkLoadPatchStatus::NoStyles;return out;}
-
-    std::array<Saved,32> snapshots{};
-    for(std::uint32_t si=0;si<styles.size;++si) {
-        std::array<std::uint8_t,0x20> style{};
-        if(!read_at(read,styles.ptr,static_cast<std::uint64_t>(si)*0x20,
-                    style.data(),style.size()))return out;
-        Array properties{};
-        if(!array_at(style.data(),0x10,1024,properties))return out;
-        for(std::uint32_t pi=0;pi<properties.size;++pi) {
-            std::array<std::uint8_t,0x20> item{};
-            if(!read_at(read,properties.ptr,static_cast<std::uint64_t>(pi)*0x20,
-                        item.data(),item.size()))return out;
-            const auto property_hash=u64(item.data(),0);
-            auto hit=std::find(hashes.begin(),hashes.begin()+targets.size(),property_hash);
-            if(hit==hashes.begin()+targets.size())continue;
-            const auto index=static_cast<std::size_t>(hit-hashes.begin());
-            found[index]=true;
-            const Rgb selected=targets[index].theme_color;
-            if(out.matched==snapshots.size()) {out.status=InkLoadPatchStatus::InvalidProperty;return out;}
-            const auto type=u64(item.data(),0x8);
-            const auto address=u64(item.data(),0x10);
-            if(!is_color_type(read,type) || address<0x10000 || (address&15)) {
-                out.status=InkLoadPatchStatus::InvalidProperty;return out;
-            }
-            HdrColor current{};
-            if(!read_at(read,address,0,&current,sizeof(current)) ||
-               !finite_hdr(current)) {
-                out.status=InkLoadPatchStatus::InvalidProperty;return out;
-            }
-            for(std::uint32_t i=0;i<out.matched;++i) {
-                if(snapshots[i].address==address) {
-                    out.status=InkLoadPatchStatus::InvalidProperty;return out;
-                }
-            }
-            // Preserve the native property's existing HDR peak and alpha.
-            // This is an SDR authoring preview, not calibrated HDR transfer.
-            const auto peak=std::max({current.red,current.green,current.blue});
-            if(!(peak>0.f) || peak>65504.f) {
-                out.status=InkLoadPatchStatus::InvalidProperty;return out;
-            }
-            const float scale=peak/255.0f;
-            HdrColor desired{selected.r*scale,selected.g*scale,
-                             selected.b*scale,current.alpha};
-            if(!finite_hdr(desired)) {
-                out.status=InkLoadPatchStatus::InvalidProperty;return out;
-            }
-            snapshots[out.matched++]={address,current,desired,type,property_hash,si,pi};
-        }
-    }
-    for(std::size_t i=0;i<targets.size();++i) {
-        if(!found[i]) {
-            out.status=InkLoadPatchStatus::NoMatchingProperty;return out;
-        }
-    }
-    if(out.matched==0) {
-        out.status=InkLoadPatchStatus::NoMatchingProperty;return out;
-    }
+    if(!write)return out;
+    const auto plan=prepare_palette(read,resource,path,targets,journal!=nullptr);
+    out.matched=plan.matched;
+    if(!plan.ready) {out.status=plan.failure;return out;}
+    const auto& snapshots=plan.snapshots;
+    const auto resource_id=plan.resource_id;
     out.original=snapshots[0].before;
     out.preview=snapshots[0].after;
     bool changed=false;

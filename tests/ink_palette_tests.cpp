@@ -81,6 +81,21 @@ int main(){
         {"MainColors.PanelBlue",Rgb{120,175,200}},
         {"MainColors.ActiveYellow",Rgb{246,199,70}}
     }};
+    // A complete read-only inspection must agree with the patcher's
+    // validation, without ever calling the memory writer.
+    auto inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    CHECK(inspected.eligible && inspected.matched==3 && inspected.styles==2);
+    CHECK(mem.writes==0);
+    mem.put(object,0x28,std::uint64_t(0));
+    inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    CHECK(!inspected.eligible && inspected.failure==InkLoadPatchStatus::InvalidResource);
+    mem.put(object,0x28,std::uint64_t(0xAA55));
+    mem.put(object,0x4c,0u);
+    inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    CHECK(!inspected.eligible && inspected.failure==InkLoadPatchStatus::NoStyles);
+    mem.put(object,0x4c,2u);
+    CHECK(mem.writes==0);
+
     InkLoadJournal journal{};
     auto result=patch_loaded_ink_palette(rd,wr,object,path,palette,&journal);
     CHECK(result.status==InkLoadPatchStatus::Applied);
@@ -101,6 +116,10 @@ int main(){
     std::array<InkPaletteEntry,4> missing{{
         palette[0],palette[1],palette[2],{"MainColors.NotInGame",Rgb{1,2,3}}
     }};
+    inspected=inspect_loaded_ink_palette(rd,object,path,missing);
+    CHECK(!inspected.eligible &&
+          inspected.failure==InkLoadPatchStatus::NoMatchingProperty);
+    CHECK(mem.writes==writes);
     result=patch_loaded_ink_palette(rd,wr,object,path,missing,&journal);
     CHECK(result.status==InkLoadPatchStatus::NoMatchingProperty);
     CHECK(mem.writes==writes && !journal.active());
@@ -111,6 +130,9 @@ int main(){
 
     // If any requested property has an incorrect Variant type, none change.
     mem.put(props2,8,rtti|1);
+    inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    CHECK(!inspected.eligible && inspected.failure==InkLoadPatchStatus::InvalidProperty);
+    CHECK(mem.writes==writes);
     CHECK(patch_loaded_ink_palette(rd,wr,object,path,palette).status==
           InkLoadPatchStatus::InvalidProperty);
     CHECK(mem.writes==writes);
