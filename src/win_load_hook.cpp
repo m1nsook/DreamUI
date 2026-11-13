@@ -36,6 +36,7 @@ std::array<InkPaletteEntry,3> s_palette{{
     {"MainColors.PanelBlue",{}},
     {"MainColors.ActiveYellow",{}}
 }};
+std::mutex s_palette_lock;
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
@@ -176,8 +177,14 @@ void handle_serializer(void* serializer) {
             continue;
         }
         if(intent!=1 || s_journal.active())continue;
+        std::array<InkPaletteEntry,3> theme_palette{};
+        {
+            std::unique_lock guard(s_palette_lock,std::try_to_lock);
+            if(!guard.owns_lock())continue;
+            theme_palette=s_palette;
+        }
         const auto result=patch_loaded_ink_palette(
-            read,write,object,path,s_palette,&s_journal);
+            read,write,object,path,theme_palette,&s_journal);
         if(result.status==InkLoadPatchStatus::Applied) {
             ++s_applied;
             s_journal_active.store(true,std::memory_order_release);
@@ -260,15 +267,9 @@ bool start_native_resource_stage(
         // Hard opt-in. Ordinary builds and normal installs are untouched.
         if(!std::filesystem::is_regular_file(home/L"dev"/L"native-ink-preview.enable"))
             return false;
-        constexpr std::array<std::string_view,3> tokens{
-            "text.primary","text.secondary","selection.active"};
-        for(std::size_t i=0;i<tokens.size();++i) {
-            const auto found=theme.colors.find(std::string(tokens[i]));
-            if(found==theme.colors.end()) {
-                log<<"Native Ink preview missing theme token "<<tokens[i]<<"\n";
-                return false;
-            }
-            s_palette[i].theme_color=found->second;
+        if(!native_resource_stage_set_theme(theme)) {
+            log<<"Native Ink preview missing color tokens or journal active\n";
+            return false;
         }
         std::uint32_t rva=0;
         AddressSections sections{};
@@ -309,6 +310,32 @@ bool start_native_resource_stage(
     }
 #endif
 }
+bool native_resource_stage_set_theme(const Theme& theme) noexcept {
+#if !defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
+    (void)theme;
+    return true; // theme selection is independent of experimental engine hooks
+#else
+    if(s_journal_active.load(std::memory_order_acquire))return false;
+    constexpr std::array<std::string_view,3> tokens{
+        "text.primary","text.secondary","selection.active"};
+    std::array<InkPaletteEntry,3> selected{{
+        {"MainColors.Red",{}},{"MainColors.PanelBlue",{}},
+        {"MainColors.ActiveYellow",{}}
+    }};
+    for(std::size_t i=0;i<tokens.size();++i){
+        const auto found=theme.colors.find(std::string(tokens[i]));
+        if(found==theme.colors.end())return false;
+        selected[i].theme_color=found->second;
+    }
+    try {
+        std::lock_guard guard(s_palette_lock);
+        if(s_journal_active.load(std::memory_order_acquire))return false;
+        s_palette=selected;
+    } catch(...) {return false;}
+    return true;
+#endif
+}
+
 bool native_resource_stage_request_apply() noexcept {
 #if !defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
     return false;
