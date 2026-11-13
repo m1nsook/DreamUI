@@ -73,3 +73,26 @@ authenticated again; a command acknowledgement does **not** mean that
 the UI has been refreshed or the original color restored. Status exposes
 pending intent, snapshot count and restoration failure count. No
 developer command ever writes directly from the file watcher thread.
+
+
+## Selecting a theme from installed .dream files
+
+Place valid `.dream` archives in `Cyberpunk 2077/dreamui/themes/`
+and start the game. The standalone ASI validates each package and lists
+accepted identities with `themes`. Then write a command such as:
+
+`select dreamui.default`
+
+or use any accepted installed theme ID. The choice is saved in the bounded
+file `dreamui/active-theme.txt` and loaded on the next launch. An invalid
+ID falls back to the default theme. The file is atomically replaced,
+and only catalog-validated IDs are accepted.
+
+**Selection is not an immediate in-game UI change.** In ordinary builds
+the preference is all that changes. In explicitly enabled experimental
+builds the selected palette is applied only if the engine's authenticated
+main-colors serializer callback next runs. An active restoration journal
+must be cleared by a verified restore before changing themes.
+
+No HUD Painter, DreamTools editor, Codeware, redscript, RED4ext or ImGui
+dependency is introduced.

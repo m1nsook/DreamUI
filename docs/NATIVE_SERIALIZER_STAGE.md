@@ -161,3 +161,19 @@ post-load work follows it. We do not invoke PostLoad twice.
 
 This work remains part of the standalone ASI and does not import
 Codeware or HUD Painter into the game.
+
+
+## Validated .dream theme selection
+
+The game-side ASI now retains the actual validated colors of all loaded
+`.dream` packages, not only their catalog names. `select <theme-id>`
+updates the active catalog selection, persists it to
+`dreamui/active-theme.txt` and supplies the three mapped colors to
+the conditional native serializer bridge. The bridge snapshots its
+palette under a mutex on the game callback thread, avoiding a data
+race with the console worker.
+
+Theme switching is refused if a native restoration journal is still
+active. The preference stores only a validated theme ID, not any
+resource address or arbitrary file path. Neither the preference
+nor the console worker directly changes live game memory.

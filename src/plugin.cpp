@@ -5,9 +5,11 @@
 #include "dreamui/control_hub.hpp"
 #include "dreamui/win_probe.hpp"
 #include "dreamui/win_load_hook.hpp"
+#include "dreamui/active_theme.hpp"
 #include "dreamui/dev/command_registry.hpp"
 #include "dreamui/dev/command_inbox.hpp"
 #include <atomic>
+#include <map>
 #include <optional>
 #include <exception>
 #include <filesystem>
@@ -54,7 +56,7 @@ DWORD WINAPI initialize(LPVOID context) {
         dreamui::DreamCatalog catalog;
         const auto theme_dir = home / L"themes";
         unsigned accepted = 0;
-        std::optional<dreamui::Theme> active_theme;
+        std::map<std::string,dreamui::Theme> loaded_themes;
         if (fs::exists(theme_dir)) {
             for (const auto& entry : fs::directory_iterator(theme_dir)) {
                 if (!entry.is_regular_file() || entry.path().extension() != L".dream") continue;
@@ -75,19 +77,21 @@ DWORD WINAPI initialize(LPVOID context) {
                     log << "Rejected theme: " << error << "\n";
                     continue;
                 }
-                if (parsed.theme.id == "dreamui.default")
-                    active_theme = parsed.theme;
+                loaded_themes.emplace(parsed.theme.id, parsed.theme);
                 ++accepted;
                 log << "Validated theme " << parsed.theme.id
                     << " | " << parsed.theme.colors.size() << " color tokens\n";
             }
         }
-        const auto hub = catalog.view("dreamui.default");
+        const auto preference_path = home / L"active-theme.txt";
+        const auto selected_id = dreamui::read_selected_dream_id(preference_path);
+        auto hub = catalog.view(selected_id.empty() ? "dreamui.default" : selected_id);
         log << "Themes available=" << accepted
             << " active=" << (hub.has_themes ? hub.active_name : "(none)")
             << "\n";
-        if (active_theme)
-            dreamui::start_native_resource_stage(fs::path(exe),home,*active_theme,log);
+        if (const auto chosen = loaded_themes.find(hub.active_id);
+            chosen != loaded_themes.end())
+            dreamui::start_native_resource_stage(fs::path(exe),home,chosen->second,log);
         log << "Diagnostics: plain TAB or developer command file; "
                "no automatic scans, no DX12 hooks. "
             << dreamui::native_resource_stage_status() << "\n";
@@ -141,6 +145,7 @@ DWORD WINAPI initialize(LPVOID context) {
                 ctx.append("diagnostic requests=" + std::to_string(requests) +
                            " | last phase label=" + phase +
                            " | verified themes=" + std::to_string(accepted) +
+                           " | selected=" + hub.active_id +
                            " | " + dreamui::native_resource_stage_status());
             });
         registry.add("probe", "probe [phase-label] - read-only Ink graph snapshot",
@@ -151,6 +156,34 @@ DWORD WINAPI initialize(LPVOID context) {
                 }
                 phase = args.empty() ? "unspecified" : args.front();
                 if (ctx.request_refresh) *ctx.request_refresh = true;
+            });
+        registry.add("select",
+            "select <theme-id> - persist a validated .dream theme choice",
+            [&](auto& ctx,std::span<const std::string> args) {
+                if(args.size()!=1) {
+                    ctx.append("usage: select <theme-id>");
+                    return;
+                }
+                const auto found = loaded_themes.find(args.front());
+                if(found==loaded_themes.end()) {
+                    ctx.append("theme not validated/installed: " + args.front());
+                    return;
+                }
+                if(!dreamui::native_resource_stage_set_theme(found->second)) {
+                    ctx.append("selection refused: current native color journal must restore first");
+                    return;
+                }
+                hub = catalog.view(found->first);
+                std::string save_error;
+                if(!dreamui::write_selected_dream_id(
+                    preference_path,found->first,save_error)) {
+                    ctx.append("selected for this game session, but save failed: " + save_error);
+                } else {
+                    ctx.append("selected " + found->second.name +
+                               " (" + found->first + "); saved for next launch");
+                }
+                if(dreamui::native_resource_stage_request_apply())
+                    ctx.append("native palette queued for next resource load (not instant)");
             });
         registry.add("ink-apply",
             "request native preview on next main-colors resource load (experimental)",
@@ -199,7 +232,7 @@ DWORD WINAPI initialize(LPVOID context) {
 
         context.append("DreamUI developer commands ready. Create or edit "
                        "dreamui/dev/commands.txt after game launch; "
-                       "commands: help, version, themes, status, probe [phase], ink-apply, ink-restore, clear");
+                       "commands: help, version, themes, select <id>, status, probe [phase], ink-apply, ink-restore, clear");
         bool was_down = modifier_down(VK_TAB);
         while (running.load(std::memory_order_relaxed)) {
             const auto batch = inbox.poll(inbox_path);
