@@ -2,6 +2,7 @@
 #include <windows.h>
 #include "dreamui/win_clone_probe.hpp"
 #include "dreamui/ink_cache.hpp"
+#include "dreamui/ink_style_snapshot.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -164,6 +165,16 @@ public:
         if(!type_and_path(source.instance,expected.path_hash,cfg_,identity) ||
            identity!=expected.source_instance_id ||
            !read_style_array(source.instance,source_styles_))return false;
+        // Reject resources with unsupported Variant ownership BEFORE
+        // invoking the native clone. For now an all-HDRColor resource is
+        // the only type tree we can audit safely, including nested data.
+        const MemoryRead rd=[](std::uint64_t a,void* d,std::size_t n){
+            return read_memory(a,d,n);
+        };
+        const auto captured=capture_loaded_ink_style_tree(
+            rd,source.instance,expected.path_hash,source_snapshot_);
+        if(captured.status!=InkStyleCaptureStatus::Captured ||
+           source_snapshot_.styles.size()!=source_styles_.count)return false;
         result_.source_styles=source_styles_.count;
         return true;
     }
@@ -193,23 +204,95 @@ public:
         if(!read_style_array(clone.instance,cloned) ||
            cloned.count!=source_styles_.count ||
            cloned.data==source_styles_.data)return false;
+        // Check that the clone contains no nested array or HDRColor
+        // allocation borrowed from the source BEFORE allowing release.
+        if(!prove_deep_independence(cloned))return false;
+        // The deep-copy comparison above also authorizes destroying the
+        // clone on subsequent identity/value-validation failure.
+        safe_to_release_=true;
+        const MemoryRead rd=[](std::uint64_t a,void* d,std::size_t n){
+            return read_memory(a,d,n);
+        };
+        InkOwnedStyleTree cloned_snapshot{};
+        const auto result=capture_loaded_ink_style_tree(
+            rd,clone.instance,identity.path_hash,cloned_snapshot);
+        if(result.status!=InkStyleCaptureStatus::Captured ||
+           cloned_snapshot.styles.size()!=source_snapshot_.styles.size() ||
+           cloned_snapshot.properties.size()!=source_snapshot_.properties.size())
+            return false;
+        for(std::size_t i=0;i<source_snapshot_.styles.size();++i) {
+            const auto& a=source_snapshot_.styles[i];
+            const auto& b=cloned_snapshot.styles[i];
+            if(a.style_id!=b.style_id || a.state!=b.state ||
+               a.first_property!=b.first_property ||
+               a.property_count!=b.property_count)return false;
+        }
+        for(std::size_t i=0;i<source_snapshot_.properties.size();++i) {
+            const auto& a=source_snapshot_.properties[i];
+            const auto& b=cloned_snapshot.properties[i];
+            if(a.property_path_hash!=b.property_path_hash ||
+               !(a.color==b.color))return false;
+        }
         result_.cloned_styles=cloned.count;
         return true;
     }
     void release_owned(InkOwnedNativeHandle& out) noexcept override {
-        // If the engine unexpectedly returned an alias, we cannot assume
-        // that Clone incremented a new strong reference. Never decrement
-        // the original resource's serializer-owned refcount on a guess.
-        if(out.instance==source_.instance || out.ref_count==source_.ref_count ||
+        // An incomplete clone, alias, or unverified nested allocation
+        // cannot be safely destructed; a single bounded test allocation
+        // is preferable to freeing the original resource's memory.
+        if(!safe_to_release_ || out.instance==source_.instance ||
+           out.ref_count==source_.ref_count ||
            !release_native_handle(out,cfg_))
             release_failed_=true;
     }
     bool release_failed() const noexcept {return release_failed_;}
 private:
+    // The source was already authenticated and fully HDRColor-typed.
+    // This proves ownership of every nested array and external Variant
+    // slot that could be destructed by ~inkStyleResource.
+    bool prove_deep_independence(const StyleArray& clone) const noexcept {
+        if(!source_snapshot_.complete() ||
+           source_snapshot_.styles.size()!=source_styles_.count)return false;
+        for(std::uint32_t si=0;si<source_styles_.count;++si) {
+            std::array<std::uint8_t,0x20> source_style{},clone_style{};
+            if(!read_memory(source_styles_.data+std::uint64_t(si)*0x20,
+                            source_style.data(),source_style.size()) ||
+               !read_memory(clone.data+std::uint64_t(si)*0x20,
+                            clone_style.data(),clone_style.size()))return false;
+            const auto count=u32(source_style.data(),0x1c);
+            if(count!=u32(clone_style.data(),0x1c) ||
+               count!=source_snapshot_.styles[si].property_count)return false;
+            if(!count)continue;
+            const auto source_props=u64(source_style.data(),0x10);
+            const auto clone_props=u64(clone_style.data(),0x10);
+            if(source_props<0x10000 || clone_props<0x10000 ||
+               source_props==clone_props)return false;
+            for(std::uint32_t pi=0;pi<count;++pi) {
+                std::array<std::uint8_t,0x20> a{},b{};
+                if(!read_memory(source_props+std::uint64_t(pi)*0x20,
+                                a.data(),a.size()) ||
+                   !read_memory(clone_props+std::uint64_t(pi)*0x20,
+                                b.data(),b.size()))return false;
+                if(u64(a.data(),0)!=u64(b.data(),0) ||
+                   u64(a.data(),8)!=u64(b.data(),8) ||
+                   (u64(a.data(),8)&1)!=0)return false;
+                // The only supported external type is HDRColor (already
+                // validated in the source snapshot). Each clone value
+                // must own its own 16-byte allocation.
+                const auto src_data=u64(a.data(),0x10);
+                const auto clone_data=u64(b.data(),0x10);
+                if(src_data<0x10000 || clone_data<0x10000 ||
+                   src_data==clone_data)return false;
+            }
+        }
+        return true;
+    }
     InkBorrowedHandle source_{};
     WinInkCloneProbeConfig cfg_{};
     WinInkCloneProbeResult& result_;
     StyleArray source_styles_{};
+    InkOwnedStyleTree source_snapshot_{};
+    bool safe_to_release_=false;
     bool release_failed_=false;
 };
 } // namespace
