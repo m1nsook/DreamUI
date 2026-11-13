@@ -129,12 +129,22 @@ void handle_serializer(void* serializer) {
         ++s_candidates;
         std::uint64_t path=0;
         if(!safe_read(object+0x30,&path,sizeof(path)) || !path)continue;
+        // The independent 2.5 archive dump confirms main_colors.inkstyle
+        // itself contains ten inkStyle entries, ten themes, two overrides.
+        // Do NOT indiscriminately change Johnny, color-blindness, or other
+        // loaded theme resources. One primary palette first.
+        if(path!=resource_path_hash(
+            R"(base\gameplay\gui\common\main_colors.inkstyle)"))continue;
         const auto result=patch_loaded_ink_color(
             read,write,object,path,"MainColors.Red",target);
         if(result.status==InkLoadPatchStatus::Applied)++s_applied;
-        else if(result.status==InkLoadPatchStatus::InvalidProperty ||
-                result.status==InkLoadPatchStatus::WriteFailed ||
-                result.status==InkLoadPatchStatus::RollbackFailed)
+        else if(result.status==InkLoadPatchStatus::RollbackFailed) {
+            ++s_failed;
+            // Never continue mutating resource data after an unverified
+            // partial rollback; retain the original game load behavior.
+            s_enabled.store(false,std::memory_order_release);
+        } else if(result.status==InkLoadPatchStatus::InvalidProperty ||
+                  result.status==InkLoadPatchStatus::WriteFailed)
             ++s_failed;
     }
 }
