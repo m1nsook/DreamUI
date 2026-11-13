@@ -10,6 +10,8 @@ using namespace dreamui;
 struct Memory {
     std::map<std::uint64_t,std::vector<std::uint8_t>> entries;
     int failing_write=0;
+    int fail_write_number=0;
+    int writes_seen=0;
     void region(std::uint64_t addr,std::size_t len){entries[addr].resize(len);}
     template<class T> void put(std::uint64_t addr,std::size_t off,T value) {
         auto& v=entries.at(addr);
@@ -21,6 +23,9 @@ struct Memory {
             if(addr>=base && addr-base<=v.size() && size<=v.size()-(addr-base)) {
                 if(writer) {
                     std::memcpy(v.data()+addr-base,ptr,size);
+                    ++writes_seen;
+                    if(fail_write_number>0 && writes_seen==fail_write_number)
+                        return false;
                     if(failing_write>0){--failing_write;return false;}
                 }else std::memcpy(ptr,v.data()+addr-base,size);
                 return true;
@@ -32,11 +37,11 @@ struct Memory {
 #define CHECK(expr) do{ if(!(expr)){std::cerr<<"FAIL line "<<__LINE__<<": "<<#expr<<"\n";return 1;} }while(0)
 int main(){
     constexpr std::uint64_t resource=0x100000,styles=0x200000,properties=0x300000,
-        meta=0x400000,storage=0x500000;
+        meta=0x400000,storage=0x500000,properties2=0x310000,storage2=0x510000;
     const auto path=resource_path_hash(R"(base\gameplay\gui\common\themes\main_colors_default.inkstyle)");
     Memory mem;
     for(const auto& [addr,len]:std::array<std::pair<std::uint64_t,std::size_t>,5>{{
-        {resource,0xC0},{styles,0x20},{properties,0x20},{meta,0x80},{storage,0x20}}})
+        {resource,0xC0},{styles,0x40},{properties,0x20},{meta,0x80},{storage,0x20}}})
         mem.region(addr,len);
     mem.put(resource,0x30,path);
     mem.put(resource,0x40,styles);
@@ -97,5 +102,44 @@ int main(){
     CHECK(patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected).status==InkLoadPatchStatus::NoStyles);
     mem.put(resource,0x4c,999u);
     CHECK(patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected).status==InkLoadPatchStatus::InvalidResource);
+
+    // Two matching properties in different inkStyles: the second write
+    // partially fails after the first succeeded. Both MUST be restored.
+    mem.region(properties2,0x20);
+    mem.region(storage2,0x20);
+    mem.put(styles,0x20+0x10,properties2);
+    mem.put(styles,0x20+0x18,1u);
+    mem.put(styles,0x20+0x1c,1u);
+    mem.put(properties2,0,cname_hash("MainColors.Red"));
+    mem.put(properties2,8,meta);
+    mem.put(properties2,16,storage2);
+    const HdrColor second_vanilla{1.4f,0.2f,0.3f,1.0f};
+    mem.put(storage2,0,second_vanilla);
+    mem.put(storage,0,vanilla);
+    mem.put(resource,0x48,2u);
+    mem.put(resource,0x4c,2u);
+
+    mem.writes_seen=0;
+    mem.fail_write_number=2;
+    result=patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected);
+    CHECK(result.status==InkLoadPatchStatus::WriteFailed);
+    CHECK(read(storage,&after,sizeof(after)) && after==vanilla);
+    HdrColor second_after{};
+    CHECK(read(storage2,&second_after,sizeof(second_after)) &&
+          second_after==second_vanilla);
+    mem.fail_write_number=0;
+
+    // A malformed *later* property must cause no writes to an earlier
+    // perfectly valid one: validate the complete journal before mutation.
+    const auto writes_before=mem.writes_seen;
+    mem.put(properties2,8,meta|1);
+    result=patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected);
+    CHECK(result.status==InkLoadPatchStatus::InvalidProperty);
+    CHECK(mem.writes_seen==writes_before);
+    CHECK(read(storage,&after,sizeof(after)) && after==vanilla);
+    mem.put(properties2,8,meta);
+    result=patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected);
+    CHECK(result.status==InkLoadPatchStatus::Applied && result.matched==2 &&
+          result.written==2);
     std::cout<<"Native Ink load-stage color transactions and failure rollback tests passed\n";
 }
