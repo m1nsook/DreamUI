@@ -74,7 +74,9 @@ in-game dev window.
   `not_attempted`, `0`, and `0`. Only with a **separate** explicit
   `native-ink-clone.enable` marker, without write mode, DreamUI may
   perform one native clone and handle-release roundtrip in an authenticated
-  serializer callback. `verified_and_released` means a temporary clone
+  serializer callback **only when the complete source style tree consists
+  of validated HDRColor Variants**. Native array and color allocation
+  aliases prevent release and are reported as `release_failed`. `verified_and_released` means a temporary clone
   passed source/clone identity and ownership checks and was released.
   `release_failed` is a stop condition, not a safe cleanup claim.
   No source Ink colors are written by this clone test.
