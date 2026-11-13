@@ -109,7 +109,8 @@ DWORD WINAPI initialize(LPVOID context) {
             load_trace << last_native_status << '\n';
             load_trace.flush();
         }
-        std::uint64_t next_native_sample = GetTickCount64() + 1000;
+        const std::uint64_t native_trace_start = GetTickCount64();
+        std::uint64_t next_native_sample = native_trace_start + 1000;
         unsigned native_trace_updates = 0;
 
         // Fresh diagnostic log for every launch, not an enormous append-only
@@ -275,7 +276,7 @@ DWORD WINAPI initialize(LPVOID context) {
                 if(status != last_native_status) {
                     last_native_status = status;
                     if(load_trace && native_trace_updates < 1024) {
-                        load_trace << "uptime_ms=" << now
+                        load_trace << "uptime_ms=" << (now - native_trace_start)
                                    << " | " << status << '\n';
                         load_trace.flush();
                     } else if(load_trace && native_trace_updates == 1024) {
