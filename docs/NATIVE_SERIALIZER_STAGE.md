@@ -47,10 +47,10 @@ including the write that may have *partially succeeded*.
   entry and CClass name == `inkStyleResource`
 - Reads only engine-owned objects from the live serializer's strong
   handles, never weak ResourceLoader cache pointers
-- Applies only the `MainColors.Red` property on the exact vanilla
-  `base\\gameplay\\gui\\common\\main_colors.inkstyle` resource, from
-  DreamUI's existing `text.primary` token. Other themes, including Johnny
-  and accessibility palettes, are excluded from this initial preview
+- Applies only three documented native properties from `text.primary`,
+  `text.secondary`, and `selection.active` on the exact vanilla
+  `base\\gameplay\\gui\\common\\main_colors.inkstyle` resource.
+  Other themes, including Johnny and accessibility palettes, are excluded
 - Uses MinHook **statically linked** under its BSD-2-Clause license;
   no DLL or installed framework is required
 
