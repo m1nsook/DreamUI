@@ -32,6 +32,19 @@ class ReleaseProfileTests(unittest.TestCase):
         self.assertIn("native-ink-write.enable", stage)
         self.assertIn("native-ink-clone.enable", stage)
 
+    def test_release_workflow_has_one_clean_publish_path(self):
+        workflow = (ROOT / ".github/workflows/release-testing.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(workflow.count("      - name: Unit tests"), 1)
+        self.assertEqual(workflow.count("      - name: Publish prerelease only"), 1)
+        self.assertEqual(workflow.count("gh release create "), 1)
+        self.assertEqual(workflow.count("cmake -S . -B build "), 1)
+        self.assertIn("--prerelease", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("refusing to replace an existing artifact", workflow)
+        self.assertIn("ctest --test-dir build -C Release --output-on-failure", workflow)
+
     def test_package_never_includes_unsafe_markers(self):
         workflow = (ROOT / ".github/workflows/release-testing.yml").read_text(encoding="utf-8")
         self.assertIn('$root/dreamui/dev', workflow)
