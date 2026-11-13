@@ -2,7 +2,7 @@
 
 Free, open-source theme framework for Cyberpunk 2077's **existing** UI.
 
-**Status: v0.1.0-alpha.8 — on-demand Tab-triggered native Ink diagnostics. Not a HUD recoloring mod yet.**
+**Status: v0.1.0-alpha.9 — standalone Tab probe + opt-in automatic native Ink loading diagnostics. Not a HUD recoloring mod yet.**
 
 DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item rarity, looting and menus without introducing a separate widget framework.
 
@@ -21,11 +21,11 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible RGB apply/restore logic.
 - **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested.
-- **Conditional native serializer-stage bridge:** source-only experimental hook with strong serializer-owned handle checks, three-property HDRColor preflight, atomic transactions, journaled rollback and exact-instance restoration. A dedicated opt-in build and marker enable **read-only** inspection; a second independent marker is required for native writes. Ordinary builds keep the bridge disabled.
+- **Conditional native serializer-stage bridge:** the alpha.9 test package compiles the hook, while activating it still requires `dreamui/dev/native-ink-preview.enable`. The alpha.9 build **locks out native writes and clone calls at compile time**, even if other marker files exist. Developers can explicitly build separate unsafe experiments from source; those aren't included in alpha.9.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
-- **Native clone-and-release experiment:** a separate third opt-in marker in an experimental source build enables one `ISerializable::Clone` call on the strongly held Ink resource; the result is type/ownership checked and released within the same callback using the game's native Handle semantics. Normal preview remains read-only. No live UI refresh or persistent clone exists yet.
+- **Native clone-and-release experiment (source only):** the independently gated `ISerializable::Clone`/release test exists, but it is **not compiled as an active capability in alpha.9**. It requires a developer rebuild with `DREAMUI_ENABLE_NATIVE_CLONE=ON` as well as its separate marker; normal preview is read-only.
 - **Type-checked full-style ownership experiment:** the experimental serializer callback can also retain a complete, pointer-free copy of a style tree when every property is a supported `HDRColor` Variant. Unknown/unsafe Variant types invalidate the whole clone; no native allocator, live refresh, or game-memory write is enabled by this snapshot.
 - **Pointer-free first-load color capture:** the guarded native hook can retain verified original HDRColor values and style identities in DreamUI-owned memory, without retaining unsafe engine pointers. This is not a copy of the full Ink styles array or an instant restore.
 - **Automatic experimental native load trace:** in an opt-in source build, capture guarded serializer-stage callback and style preflight counters to `DreamUI-load.log` as the game loads, without Tab or developer commands. No native writes in observation mode; installing a native hook still carries risk.
