@@ -60,3 +60,14 @@ cycle-detection set; failures disable observation rather than editing
 memory. It does not acquire owning handles, refresh the game UI, or
 install a Resource/Loaded callback. It does not qualify as a live
 theme implementation.
+
+## Confirmed on-disk resource versus alpha.8 runtime
+
+The [Cyberpunk 2.5 Ink corpus](https://github.com/spuddeh/cp2077-ink-archive)
+contains **10 direct styles**, 10 themes and 2 overrides for vanilla
+`main_colors.inkstyle`. The earlier alpha.8 snapshot with zero direct
+styles therefore cannot be explained as a theme-only serialized
+container. It may reflect engine lifecycle processing or a runtime
+layout/timing mismatch. The standalone serializer-stage integration
+specifically targets the main root resource, without assuming it is
+empty.

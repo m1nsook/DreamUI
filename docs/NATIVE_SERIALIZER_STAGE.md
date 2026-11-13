@@ -47,8 +47,10 @@ including the write that may have *partially succeeded*.
   entry and CClass name == `inkStyleResource`
 - Reads only engine-owned objects from the live serializer's strong
   handles, never weak ResourceLoader cache pointers
-- Applies only the `MainColors.Red` property from DreamUI's existing
-  `text.primary` theme token
+- Applies only the `MainColors.Red` property on the exact vanilla
+  `base\\gameplay\\gui\\common\\main_colors.inkstyle` resource, from
+  DreamUI's existing `text.primary` token. Other themes, including Johnny
+  and accessibility palettes, are excluded from this initial preview
 - Uses MinHook **statically linked** under its BSD-2-Clause license;
   no DLL or installed framework is required
 
@@ -86,3 +88,21 @@ the desired game screen. Critical remaining work before public release:
 Do not equate the conditional code in this branch with a working
 standalone theme engine. No new release is justified until visible
 recolor + refresh + restoration work in the clean game, safely.
+
+## Verified Cyberpunk 2.5 serialized style data
+
+The independently extracted ink corpus at
+https://github.com/spuddeh/cp2077-ink-archive (base+Phantom Liberty, 2.5)
+contains the root path
+`base\gameplay\gui\common\main_colors.inkstyle` with **10 direct inkStyle
+entries**, **10 theme references** and **2 override references**. Its
+first `MainColors` style includes a typed `HDRColor` for `MainColors.Red`
+approximately RGBA (1.1761, 0.3809, 0.3476, 1.0).
+
+In contrast, the owner's earlier alpha.8 *runtime* cache read reported
+`styles=0, themes=10, overrides=2`. This is NOT evidence that the original
+asset has no styles. It may reflect post-load movement/consumption of
+the styles array, an observer timing issue, or a wrong assumption about
+the runtime layout. The serializer-stage hook is intended to operate
+before such a runtime difference can erase the source data, but **that
+ordering is still unverified in the running game**.
