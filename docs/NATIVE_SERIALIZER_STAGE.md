@@ -54,8 +54,9 @@ including the write that may have *partially succeeded*.
 - Uses MinHook **statically linked** under its BSD-2-Clause license;
   no DLL or installed framework is required
 
-**The bridge is not turned on in regular builds.** It now has two
-separately gated modes:
+**The bridge is not turned on in regular builds.** It has three
+independently gated behaviors: read-only observation, a separate one-shot
+native clone experiment, and the existing native color write test.
 
 1. Build with `-DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON` (Windows CI
    compiles this configuration; normal local builds default OFF).
@@ -73,8 +74,16 @@ separately gated modes:
    This enables the pre-existing load-stage apply/restore intent path.
    Neither marker is re-read at runtime; removing or adding one requires
    a game restart. Do not use write mode on a normal playthrough.
+4. **Separate experimental clone/release test only:** with preview enabled
+   and native writes ABSENT, additionally create
+   `dreamui/dev/native-ink-clone.enable`. This authorizes exactly one
+   native `ISerializable::Clone` attempt after a successful load-stage
+   preflight. It allocates and destroys a temporary resource; it is
+   **not read-only** and may crash the process. A clone marker without
+   resolvable game Clone and Handle release symbols is ignored.
+   The clone marker is **not needed for normal read-only diagnostics**.
 
-The read-only mode never calls `MemoryWrite`, but **installing a native
+The read-only mode never calls `MemoryWrite` or `Clone`, but **installing a native
 function hook is still invasive**: a wrong callback ABI, build fingerprint,
 or hook ordering could crash the process. Observation is not proof of a
 fully safe hook, UI refresh, or stable native recoloring.
@@ -88,9 +97,10 @@ A successful C++/Windows build does not prove that the game callback can
 be safely intercepted or that the newly written style is consumed on
 the desired game screen. Critical remaining work before public release:
 
-- Verify the *exact* serializer-stage callback ABI, ordering and native
-  resource ownership on the clean 2.5 installation. The method ABI is
-  documented by Codeware, but DreamUI has not observed it running.
+- The serializer-stage callback **was observed running** on the clean 2.5
+  installation: the trace recorded 10 styles and three validated colors.
+  The newly introduced native clone and Handle-release ABI have not yet
+  been verified against real game resources.
 - Verify the target's game-thread synchronization, including possible
   parallel resource-postload jobs. Current hook uses its own
   non-blocking reentrancy guard and never writes from Tab worker.
@@ -240,12 +250,44 @@ allocator-aware `Memory::Delete` when appropriate. Calling
 incorrect. The interface requires a backend capable of safely dispatching
 releases to the engine when the initiating callback is finished.
 
-**Status: the lifecycle contract and symbol lookup are implemented and
-mock-tested; the game-specific clone/backend is NOT wired or invoked.**
-The log deliberately says `clone_owner_backend=not_wired`. No new
-marker, active clone, engine-memory write, or PostLoad call is added.
-A resolved hash alone is not proof that a clone succeeds or that the game
-will accept a subsequent refresh.
+**Updated experimental implementation:** `src/win_clone_probe.cpp`
+now implements the game-specific ABI through its own symbol resolver.
+In the normal preview path it remains entirely dormant. With
+`native-ink-clone.enable` separately present, it performs at most
+one cloned-resource roundtrip on the authenticated serializer callback,
+requires a source style tree containing **only fully verified HDRColor
+Variants**, checks the clone's RTTI and resource path, and verifies that
+all four resource array buffers, nested style-property arrays, and
+external HDRColor payloads are independently allocated before releasing
+the temporary clone. The engine's typed Clone operation remains responsible
+for reference counting any intentionally shared `Ref<inkStyleResource>`
+objects in themes, overrides and style imports.
+
+The game-owned `Handle_DecWeakRef` function is resolved by SDK hash
+`0x333B1404` from the timestamp-matched linker database. The release
+path mirrors the SDK's `Handle<ISerializable>` destructor: atomically
+decrement strong, drop the implicit weak reference on the last strong,
+then call the virtual destructor (with MSVC deleting-destructor flag 0)
+and the object's native allocator Free when `CanBeDestructed` allows.
+Before any decrement, all required executable vtable targets and the
+allocator are validated. An unexpected handle alias is rejected without
+decrementing the serializer-owned source reference. This design is
+**experimental**, and its virtual ABI assumptions still require
+in-game verification.
+
+The trace reports `clone_release_symbol` availability and
+`clone_probe=not_attempted|rejected_source|clone_failed|
+verification_failed|verified_and_released|release_failed`, plus
+`clone_attempted` and `clone_styles`. `verified_and_released`
+indicates a successful temporary roundtrip, **not** a retained handle,
+HUD recolor, safe persistent resource lifetime, or a live UI refresh.
+No new persistent resource, source color write, or PostLoad invocation
+is implemented. If an output aliases any source-owned allocation or its Handle cannot
+be safely released, DreamUI reports `release_failed`, does not invoke
+the destructor, and stops the one-shot probe. This can intentionally
+leave **one native allocation alive until process exit** rather than risk
+freeing the game's original resource. This is a test-only fail-safe,
+**not an acceptable production resource lifecycle**.
 
 References:
 - [Codeware `Raw::ISerializable::Clone`](https://github.com/psiberx/cp2077-codeware/blob/main/src/Red/Scripting.hpp)

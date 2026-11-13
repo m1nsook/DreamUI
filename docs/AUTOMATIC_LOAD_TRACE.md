@@ -12,11 +12,12 @@ Painter 1.4.1 caches `inkStyleResource.styles` during its
 a refresh. Its installed frameworks provide that callback; DreamUI does not
 depend on them.
 
-This experiment samples DreamUI's independent, gated native
+The normal mode samples DreamUI's independent, gated native
 `ResourceSerializer::SchedulePostLoadJobs` hook and automatically writes
-atomic counters to `dreamui/logs/DreamUI-load.log`. It does **not**
-implement HUD Painter's resource ownership, in-game Inspector, refresh,
-or interactive palette switching.
+atomic counters to `dreamui/logs/DreamUI-load.log`. A separate explicitly
+armed experiment can create and release one temporary native clone; it
+does **not** retain an engine-owned resource or implement HUD Painter's
+in-game Inspector, refresh or interactive palette switching.
 
 ## Build and enable (test installation only)
 
@@ -65,11 +66,20 @@ in-game dev window.
   memory; `unsupported_variant` means at least one native property needs
   a type-aware engine copier. A failed capture retains **no partial tree**.
   Neither outcome proves safe game-side rehydration or an Ink refresh.
-- `clone_symbol=resolved|unavailable`: build-verified address DB discovery
-  of REDengine `ISerializable::Clone` (hash `2601784524`) with a
-  validated executable-code RVA. `clone_owner_backend=not_wired` means
-  DreamUI **never invokes Clone** or retains its returned handle yet;
-  symbol lookup is not a runtime clone test.
+- `clone_symbol=resolved|unavailable` and
+  `clone_release_symbol=resolved|unavailable`: linker-DB validated
+  executable entries for `ISerializable::Clone` and native
+  `Handle_DecWeakRef`. An unavailable symbol prevents a clone probe.
+- `clone_probe`, `clone_attempted`, `clone_styles`: normally
+  `not_attempted`, `0`, and `0`. Only with a **separate** explicit
+  `native-ink-clone.enable` marker, without write mode, DreamUI may
+  perform one native clone and handle-release roundtrip in an authenticated
+  serializer callback **only when the complete source style tree consists
+  of validated HDRColor Variants**. Native array and color allocation
+  aliases prevent release and are reported as `release_failed`. `verified_and_released` means a temporary clone
+  passed source/clone identity and ownership checks and was released.
+  `release_failed` is a stop condition, not a safe cleanup claim.
+  No source Ink colors are written by this clone test.
 - `last_matched_properties`: validated matching HDRColor properties
   from the most recent target preflight.
 - `preflight_ready`, `preflight_no_styles`, `preflight_missing`, and
@@ -86,9 +96,11 @@ to avoid unbounded logs in long game sessions.
 ## Safety and current limitations
 
 Although the color writer stays disabled in observe-only mode, **MinHook
-still modifies executable code** to capture native callbacks. The game's
-callback ABI, hook ordering, and resource lifecycle are not yet verified
-in a running test build. A crash remains possible. Use a separate clean
+still modifies executable code** to capture native callbacks. The
+serializer preflight succeeded on a clean 2.5 installation, but its
+safety on all screens and the native clone/destructor ABI remain unverified.
+The third clone marker is not part of read-only observation and must
+remain absent during routine preview testing. A crash remains possible. Use a separate clean
 test installation and never enable native writes on a normal playthrough.
 
 A positive `preflight_ready` is not proof of a visible color change.
