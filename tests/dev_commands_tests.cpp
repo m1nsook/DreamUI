@@ -35,7 +35,8 @@ int main() {
     CHECK(!commands.dispatch(ctx,"",response));
     CHECK(!commands.dispatch(ctx,"invalid",response));
     CHECK(!commands.dispatch(ctx,std::string(513,'x'),response));
-    CHECK(!commands.dispatch(ctx,std::string("probe ") + std::string(17*2,'a') + "\0",response) || true);
+    const std::string embedded_nul("probe\0ignored",13);
+    CHECK(!commands.dispatch(ctx,embedded_nul,response));
     CHECK(!commands.dispatch(ctx,"throw",response) && response.find("bad input")!=std::string::npos);
     CHECK(commands.dispatch(ctx," probe    main-menu  ",response));
     CHECK(trigger && output.size()==1 && output.back()=="main-menu");
