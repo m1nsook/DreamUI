@@ -27,9 +27,11 @@ struct FakeAllocator {std::uint64_t* vtable;};
 FakeAllocator g_allocator{g_allocator_vtable.data()};
 void* g_source=nullptr;
 std::uint64_t g_source_styles=0,g_source_props=0,g_source_color=0;
+std::uint64_t g_source_themes=0,g_source_overrides=0;
 int g_clone_calls=0,g_destruct_calls=0,g_free_calls=0,g_weak_calls=0;
 bool g_wrong_clone_type=false,g_alias_clone=false,g_share_styles=false;
 bool g_share_props=false,g_share_color=false;
+bool g_share_themes=false,g_share_overrides=false;
 struct Unreleased {
     void* instance=nullptr;
     std::uint32_t* refs=nullptr;
@@ -72,6 +74,12 @@ void remove_clone_data(void* object) {
         }
         ::operator delete(reinterpret_cast<void*>(styles));
     }
+    const auto themes=get64(object,0x50);
+    const auto overrides=get64(object,0x60);
+    if(themes && themes!=g_source_themes)
+        ::operator delete(reinterpret_cast<void*>(themes));
+    if(overrides && overrides!=g_source_overrides)
+        ::operator delete(reinterpret_cast<void*>(overrides));
 }
 void* __fastcall get_type(void* object) {
     if(g_wrong_clone_type && object!=g_source)
@@ -119,10 +127,21 @@ void* __fastcall clone_fn(InkOwnedNativeHandle* output,const InkBorrowedHandle* 
         put64(reinterpret_cast<void*>(styles),0x10,props);
     }
     auto* clone=new_resource(0xBB55,styles);
+    const auto themes=g_share_themes?g_source_themes:new_bytes(10*0x20);
+    if(!g_share_themes)
+        std::memcpy(reinterpret_cast<void*>(themes),
+                    reinterpret_cast<void*>(g_source_themes),10*0x20);
+    put64(clone,0x50,themes);put32(clone,0x58,10);put32(clone,0x5c,10);
+    const auto overrides=g_share_overrides?g_source_overrides:new_bytes(2*0x20);
+    if(!g_share_overrides)
+        std::memcpy(reinterpret_cast<void*>(overrides),
+                    reinterpret_cast<void*>(g_source_overrides),2*0x20);
+    put64(clone,0x60,overrides);put32(clone,0x68,2);put32(clone,0x6c,2);
     auto* refs=new std::uint32_t[2]{1,1};
     *output={reinterpret_cast<std::uint64_t>(clone),
              reinterpret_cast<std::uint64_t>(refs)};
-    if(g_share_styles || g_share_props || g_share_color)
+    if(g_share_styles || g_share_props || g_share_color ||
+       g_share_themes || g_share_overrides)
         g_unreleased.push_back({clone,refs});
     return output;
 }
@@ -173,6 +192,14 @@ int main() {
     put64(reinterpret_cast<void*>(g_source_props),0x10,g_source_color);
 
     g_source=new_resource(kSourceId,g_source_styles);
+    // Real main_colors.inkstyle has ten theme refs and two overrides.
+    // Fake handles are empty, but their backing arrays must be copied.
+    g_source_themes=new_bytes(10*0x20);
+    g_source_overrides=new_bytes(2*0x20);
+    put64(g_source,0x50,g_source_themes);
+    put32(g_source,0x58,10);put32(g_source,0x5c,10);
+    put64(g_source,0x60,g_source_overrides);
+    put32(g_source,0x68,2);put32(g_source,0x6c,2);
     auto* refs=new std::uint32_t[2]{1,1};
     const InkBorrowedHandle source{
         reinterpret_cast<std::uint64_t>(g_source),
@@ -212,6 +239,17 @@ int main() {
     CHECK(result.status==WinInkCloneProbeStatus::ReleaseFailed);
     g_share_color=false;
 
+    // Resource theme/override DynArrays also own their storage; merely
+    // copying the styles is not enough for safe native destruction.
+    g_share_themes=true;
+    result=probe_native_ink_clone(source,identity,cfg);
+    CHECK(result.status==WinInkCloneProbeStatus::ReleaseFailed);
+    g_share_themes=false;
+    g_share_overrides=true;
+    result=probe_native_ink_clone(source,identity,cfg);
+    CHECK(result.status==WinInkCloneProbeStatus::ReleaseFailed);
+    g_share_overrides=false;
+
     CHECK(g_destruct_calls==2 && g_free_calls==2 && g_weak_calls==2);
     CHECK(refs[0]==1 && refs[1]==1);
     CHECK(get64(g_source,0x40)==g_source_styles);
@@ -243,6 +281,8 @@ int main() {
     ::operator delete(reinterpret_cast<void*>(g_source_styles));
     ::operator delete(reinterpret_cast<void*>(g_source_props));
     delete reinterpret_cast<HdrColor*>(g_source_color);
+    ::operator delete(reinterpret_cast<void*>(g_source_themes));
+    ::operator delete(reinterpret_cast<void*>(g_source_overrides));
     delete[] refs;
     std::cout<<"Clone/Handle release ABI and nested allocation ownership checks pass\n";
     return 0;
