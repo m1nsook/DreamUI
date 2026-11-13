@@ -21,17 +21,14 @@ in-game Inspector, refresh or interactive palette switching.
 
 ## Build and enable (test installation only)
 
-This feature is **not in the public v0.1.0-alpha.8 ASI**.
+The **v0.1.0-alpha.9 test ASI** includes the native serializer observer, but leaves it disabled until the explicit preview marker exists. Native color writes and Clone allocation are **compiled out** in alpha.9.
 
-1. Build the Windows ASI with `-DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON`, or
-   obtain the matching Windows CI test artifact; back up the current ASI.
+1. Install the official alpha.9 prerelease ZIP, or build the Windows ASI with `-DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON` while keeping both `DREAMUI_ENABLE_NATIVE_WRITES=OFF` and `DREAMUI_ENABLE_NATIVE_CLONE=OFF`; back up the previous ASI.
 2. Install `DreamUI.asi` at `bin/x64/plugins/DreamUI.asi`. Keep a valid
    `.dream` package in `dreamui/themes/`.
 3. Before launching the game, create the empty marker
    `dreamui/dev/native-ink-preview.enable`.
-4. **Do not create `dreamui/dev/native-ink-write.enable`.** Without
-   the second marker the serializer hook observes only and does not call
-   the native color writer.
+4. **Do not create `dreamui/dev/native-ink-write.enable`.** In the alpha.9 release ASI, **both native writes and Clone are compiled out**, even if those other marker files exist. Do not create them.
 5. Launch Cyberpunk normally. The new `dreamui/logs/DreamUI-load.log`
    is created on launch and updates automatically about once per second
    as counters change. No Tab press or `commands.txt` edit is required.
@@ -66,13 +63,14 @@ in-game dev window.
   memory; `unsupported_variant` means at least one native property needs
   a type-aware engine copier. A failed capture retains **no partial tree**.
   Neither outcome proves safe game-side rehydration or an Ink refresh.
+- `write_backend=locked_out` and `clone_backend=locked_out`: the alpha.9 release binary cannot perform either dangerous native operation, regardless of marker files. Developer-source builds may instead report `compiled` if explicitly built with those options.
 - `clone_symbol=resolved|unavailable` and
   `clone_release_symbol=resolved|unavailable`: linker-DB validated
   executable entries for `ISerializable::Clone` and native
   `Handle_DecWeakRef`. An unavailable symbol prevents a clone probe.
 - `clone_probe`, `clone_attempted`, `clone_styles`: normally
   `not_attempted`, `0`, and `0`. Only with a **separate** explicit
-  `native-ink-clone.enable` marker, without write mode, DreamUI may
+  `native-ink-clone.enable` marker, with a developer-source binary explicitly built using `DREAMUI_ENABLE_NATIVE_CLONE=ON`, without write mode, DreamUI may
   perform one native clone and handle-release roundtrip in an authenticated
   serializer callback **only when the complete source style tree consists
   of validated HDRColor Variants**. Native array and color allocation
