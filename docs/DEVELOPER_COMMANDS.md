@@ -106,8 +106,10 @@ In a dedicated test installation, compile the ASI with
 
 When a validated `.dream` is installed, this enables **read-only**
 serializer-stage checks. It does not write native colors. After launching,
-save `status` to `dreamui/dev/commands.txt` and inspect the returned
-`native stage=enabled mode=observe-only` counters in `DreamUI-dev.log`.
+`dreamui/logs/DreamUI-load.log` automatically captures the native status
+and changed callback/preflight counters about once per second; no
+`commands.txt` file or Tab press is required. The optional `status`
+command is still available if desired.
 A positive `preflight_ready` is an authenticated typed-color inspection,
 not proof of a rendered color change.
 
