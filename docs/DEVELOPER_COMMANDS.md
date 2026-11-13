@@ -59,8 +59,10 @@ No ImGui/MinHook/redscript/RED4ext SDK dependency is introduced.
 The optional developer commands are pure C++ and can later serve
 a native Ink interface instead of an external DX12 overlay.
 
-The latest released game build remains alpha.8 until DreamUI actually
-has a working, reversible native color override.
+Alpha.9 retains the optional file-based developer command inbox, but
+its production test ASI only permits opt-in read-only native tracing.
+An in-game DX12 developer console and reversible live recoloring remain
+unfinished.
 
 
 ## Experimental native intent commands (source only)

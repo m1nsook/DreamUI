@@ -6,6 +6,14 @@ add_library(dreamui_package STATIC src/zip_reader.cpp src/theme.cpp src/pe_probe
 target_include_directories(dreamui_package PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 option(DREAMUI_EXPERIMENTAL_NATIVE_STAGE
   "Compile guarded native serializer-stage hook (requires explicit runtime opt-in)" OFF)
+option(DREAMUI_ENABLE_NATIVE_WRITES
+  "Allow test-only native Ink color writes when explicitly opted in (DANGEROUS)" OFF)
+option(DREAMUI_ENABLE_NATIVE_CLONE
+  "Allow test-only native Ink Clone roundtrip when explicitly opted in (DANGEROUS)" OFF)
+if((DREAMUI_ENABLE_NATIVE_WRITES OR DREAMUI_ENABLE_NATIVE_CLONE) AND
+   NOT DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
+  message(FATAL_ERROR "Native writes/clone require DREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON")
+endif()
 if(WIN32)
   add_library(DreamUI SHARED src/plugin.cpp src/win_probe.cpp src/win_load_hook.cpp)
   target_link_libraries(DreamUI PRIVATE dreamui_package version)
@@ -18,6 +26,12 @@ if(WIN32)
     FetchContent_MakeAvailable(dreamui_minhook)
     target_link_libraries(DreamUI PRIVATE minhook)
     target_compile_definitions(DreamUI PRIVATE DREAMUI_EXPERIMENTAL_NATIVE_STAGE=1)
+    if(DREAMUI_ENABLE_NATIVE_WRITES)
+      target_compile_definitions(DreamUI PRIVATE DREAMUI_ENABLE_NATIVE_WRITES=1)
+    endif()
+    if(DREAMUI_ENABLE_NATIVE_CLONE)
+      target_compile_definitions(DreamUI PRIVATE DREAMUI_ENABLE_NATIVE_CLONE=1)
+    endif()
   endif()
   set_target_properties(DreamUI PROPERTIES PREFIX "" SUFFIX ".asi")
 endif()

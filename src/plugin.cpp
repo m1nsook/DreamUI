@@ -52,7 +52,8 @@ DWORD WINAPI initialize(LPVOID context) {
             return 0;
         }
         log << "DreamUI " << dreamui::kDreamUIVersion
-            << " | on-demand Tab diagnostics enabled; no game patches\n";
+            << " | standalone ASI; Tab probe and automatic load trace; "
+               "native stage opt-in only\n";
         dreamui::DreamCatalog catalog;
         const auto theme_dir = home / L"themes";
         unsigned accepted = 0;
@@ -92,8 +93,8 @@ DWORD WINAPI initialize(LPVOID context) {
         if (const auto chosen = loaded_themes.find(hub.active_id);
             chosen != loaded_themes.end())
             dreamui::start_native_resource_stage(fs::path(exe),home,chosen->second,log);
-        log << "Diagnostics: plain TAB or developer command file; "
-               "no automatic scans, no DX12 hooks. "
+        log << "Diagnostics: Tab cache snapshot, automatic native-stage "
+               "trace when explicitly enabled; no DX12 hooks. "
             << dreamui::native_resource_stage_status() << "\n";
         log.flush();
 
