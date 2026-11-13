@@ -70,13 +70,17 @@ native clone experiment, and the existing native color write test.
    `preflight_rejected` to `dreamui/logs/DreamUI-load.log` as they change.
    No Tab press or `commands.txt` command is needed.
 3. **Only when intentionally testing native mutation**, ALSO place
-   `dreamui/dev/native-ink-write.enable` before game startup.
+   `dreamui/dev/native-ink-write.enable` before game startup **in a separate
+   developer build compiled with `DREAMUI_ENABLE_NATIVE_WRITES=ON`**.
+   The alpha.9 release ASI cannot write colors even if the marker is present.
    This enables the pre-existing load-stage apply/restore intent path.
    Neither marker is re-read at runtime; removing or adding one requires
    a game restart. Do not use write mode on a normal playthrough.
 4. **Separate experimental clone/release test only:** with preview enabled
    and native writes ABSENT, additionally create
-   `dreamui/dev/native-ink-clone.enable`. This authorizes exactly one
+   `dreamui/dev/native-ink-clone.enable` in a separate developer build
+   configured with `DREAMUI_ENABLE_NATIVE_CLONE=ON`. The alpha.9 release
+   ASI cannot call Clone even if the marker is present. This authorizes exactly one
    native `ISerializable::Clone` attempt after a successful load-stage
    preflight. It allocates and destroys a temporary resource; it is
    **not read-only** and may crash the process. A clone marker without
@@ -88,8 +92,7 @@ function hook is still invasive**: a wrong callback ABI, build fingerprint,
 or hook ordering could crash the process. Observation is not proof of a
 fully safe hook, UI refresh, or stable native recoloring.
 
-There is **no distributed executable with this feature enabled yet**.
-The current public alpha.8 remains read-only.
+The **alpha.9 prerelease ASI** is distributed with the guarded observer **compiled** but not activated by default. It requires `native-ink-preview.enable`, and its native color-writing and Clone capabilities are compiled out entirely.
 
 ## What is NOT yet verified
 
@@ -250,7 +253,7 @@ allocator-aware `Memory::Delete` when appropriate. Calling
 incorrect. The interface requires a backend capable of safely dispatching
 releases to the engine when the initiating callback is finished.
 
-**Updated experimental implementation:** `src/win_clone_probe.cpp`
+**Updated experimental implementation (not enabled in alpha.9):** `src/win_clone_probe.cpp`
 now implements the game-specific ABI through its own symbol resolver.
 In the normal preview path it remains entirely dormant. With
 `native-ink-clone.enable` separately present, it performs at most
