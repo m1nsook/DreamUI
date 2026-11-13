@@ -171,10 +171,12 @@ public:
         const MemoryRead rd=[](std::uint64_t a,void* d,std::size_t n){
             return read_memory(a,d,n);
         };
-        const auto captured=capture_loaded_ink_style_tree(
-            rd,source.instance,expected.path_hash,source_snapshot_);
-        if(captured.status!=InkStyleCaptureStatus::Captured ||
-           source_snapshot_.styles.size()!=source_styles_.count)return false;
+        try {
+            const auto captured=capture_loaded_ink_style_tree(
+                rd,source.instance,expected.path_hash,source_snapshot_);
+            if(captured.status!=InkStyleCaptureStatus::Captured ||
+               source_snapshot_.styles.size()!=source_styles_.count)return false;
+        } catch(...) { return false; }
         result_.source_styles=source_styles_.count;
         return true;
     }
@@ -197,9 +199,6 @@ public:
         std::array<std::uint32_t,2> refs{};
         if(!read_memory(clone.ref_count,refs.data(),sizeof(refs)) ||
            !refs[0] || !refs[1])return false;
-        std::uint64_t cloned_id=0;
-        if(!type_and_path(clone.instance,identity.path_hash,cfg_,cloned_id))
-            return false;
         StyleArray cloned{};
         if(!read_style_array(clone.instance,cloned) ||
            cloned.count!=source_styles_.count ||
@@ -210,16 +209,21 @@ public:
         // The deep-copy comparison above also authorizes destroying the
         // clone on subsequent identity/value-validation failure.
         safe_to_release_=true;
+        std::uint64_t cloned_id=0;
+        if(!type_and_path(clone.instance,identity.path_hash,cfg_,cloned_id))
+            return false;
         const MemoryRead rd=[](std::uint64_t a,void* d,std::size_t n){
             return read_memory(a,d,n);
         };
         InkOwnedStyleTree cloned_snapshot{};
-        const auto result=capture_loaded_ink_style_tree(
-            rd,clone.instance,identity.path_hash,cloned_snapshot);
-        if(result.status!=InkStyleCaptureStatus::Captured ||
-           cloned_snapshot.styles.size()!=source_snapshot_.styles.size() ||
-           cloned_snapshot.properties.size()!=source_snapshot_.properties.size())
-            return false;
+        try {
+            const auto result=capture_loaded_ink_style_tree(
+                rd,clone.instance,identity.path_hash,cloned_snapshot);
+            if(result.status!=InkStyleCaptureStatus::Captured ||
+               cloned_snapshot.styles.size()!=source_snapshot_.styles.size() ||
+               cloned_snapshot.properties.size()!=source_snapshot_.properties.size())
+                return false;
+        } catch(...) { return false; }
         for(std::size_t i=0;i<source_snapshot_.styles.size();++i) {
             const auto& a=source_snapshot_.styles[i];
             const auto& b=cloned_snapshot.styles[i];
