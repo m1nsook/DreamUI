@@ -4,9 +4,11 @@
 #include "dreamui/theme.hpp"
 #include "dreamui/control_hub.hpp"
 #include "dreamui/win_probe.hpp"
+#include "dreamui/win_load_hook.hpp"
 #include "dreamui/dev/command_registry.hpp"
 #include "dreamui/dev/command_inbox.hpp"
 #include <atomic>
+#include <optional>
 #include <exception>
 #include <filesystem>
 #include <cstdint>
@@ -52,6 +54,7 @@ DWORD WINAPI initialize(LPVOID context) {
         dreamui::DreamCatalog catalog;
         const auto theme_dir = home / L"themes";
         unsigned accepted = 0;
+        std::optional<dreamui::Theme> active_theme;
         if (fs::exists(theme_dir)) {
             for (const auto& entry : fs::directory_iterator(theme_dir)) {
                 if (!entry.is_regular_file() || entry.path().extension() != L".dream") continue;
@@ -72,6 +75,8 @@ DWORD WINAPI initialize(LPVOID context) {
                     log << "Rejected theme: " << error << "\n";
                     continue;
                 }
+                if (parsed.theme.id == "dreamui.default")
+                    active_theme = parsed.theme;
                 ++accepted;
                 log << "Validated theme " << parsed.theme.id
                     << " | " << parsed.theme.colors.size() << " color tokens\n";
@@ -81,8 +86,11 @@ DWORD WINAPI initialize(LPVOID context) {
         log << "Themes available=" << accepted
             << " active=" << (hub.has_themes ? hub.active_name : "(none)")
             << "\n";
+        if (active_theme)
+            dreamui::start_native_resource_stage(fs::path(exe),home,*active_theme,log);
         log << "Diagnostics: plain TAB or developer command file; "
-               "no automatic scans, no DX12 hooks, no game patches.\n";
+               "no automatic scans, no DX12 hooks. "
+            << dreamui::native_resource_stage_status() << "\n";
         log.flush();
 
         // Fresh diagnostic log for every launch, not an enormous append-only
@@ -133,7 +141,7 @@ DWORD WINAPI initialize(LPVOID context) {
                 ctx.append("diagnostic requests=" + std::to_string(requests) +
                            " | last phase label=" + phase +
                            " | verified themes=" + std::to_string(accepted) +
-                           " | engine changes=disabled");
+                           " | " + dreamui::native_resource_stage_status());
             });
         registry.add("probe", "probe [phase-label] - read-only Ink graph snapshot",
             [&](auto& ctx,std::span<const std::string> args) {

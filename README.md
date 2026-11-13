@@ -20,7 +20,8 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - ASI startup verified in-game for alpha.1 and theme parsing verified for alpha.2.
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible RGB apply/restore logic.
-- **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested, **not connected to the game's event system yet**.
+- **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested.
+- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, HDRColor load-stage transactions, and rollback. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and restore are verified.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
@@ -34,7 +35,7 @@ Actual engine resource handles, Ink reading/writing, theme application, minimap/
 
 An [optional HUD Painter exporter](docs/HUDPAINTER_COMPAT.md) can apply `.dream` palettes through HUD Painter in installations that already have it, without making HUD Painter a dependency of DreamUI's ASI.
 
-See [developer commands](docs/DEVELOPER_COMMANDS.md), [native Ink lifecycle implementation](docs/NATIVE_RESOURCE_LIFECYCLE.md), [HUD Painter source research](docs/HUD_PAINTER_REFERENCE.md), [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
+See [native serializer-stage bridge](docs/NATIVE_SERIALIZER_STAGE.md), [developer commands](docs/DEVELOPER_COMMANDS.md), [native Ink lifecycle implementation](docs/NATIVE_RESOURCE_LIFECYCLE.md), [HUD Painter source research](docs/HUD_PAINTER_REFERENCE.md), [alpha.8 testing](docs/TESTING.md), [engine probe](docs/ENGINE_PROBE.md), [independent resolver](docs/ENGINE_ADAPTER.md), [planned control hub](docs/CONTROL_HUB.md), and [native Ink integration](docs/INK_INTEGRATION.md).
 
 ## Build
 
