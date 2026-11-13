@@ -25,7 +25,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
-- **Engine-owned clone groundwork:** source-only `InkOwnedCloneSession` manages game-created strong handles through a strict native backend contract, including partial-failure cleanup and source/clone verification; the standalone address resolver can locate the native `ISerializable::Clone` symbol. No clone call, new resource ownership or refresh is enabled in-game yet.
+- **Native clone-and-release experiment:** a separate third opt-in marker in an experimental source build enables one `ISerializable::Clone` call on the strongly held Ink resource; the result is type/ownership checked and released within the same callback using the game's native Handle semantics. Normal preview remains read-only. No live UI refresh or persistent clone exists yet.
 - **Type-checked full-style ownership experiment:** the experimental serializer callback can also retain a complete, pointer-free copy of a style tree when every property is a supported `HDRColor` Variant. Unknown/unsafe Variant types invalidate the whole clone; no native allocator, live refresh, or game-memory write is enabled by this snapshot.
 - **Pointer-free first-load color capture:** the guarded native hook can retain verified original HDRColor values and style identities in DreamUI-owned memory, without retaining unsafe engine pointers. This is not a copy of the full Ink styles array or an instant restore.
 - **Automatic experimental native load trace:** in an opt-in source build, capture guarded serializer-stage callback and style preflight counters to `DreamUI-load.log` as the game loads, without Tab or developer commands. No native writes in observation mode; installing a native hook still carries risk.
@@ -36,7 +36,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 
 ## Not implemented
 
-A game-verified native serializer callback, reliable immediate Ink refresh and in-game theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. The source-only experimental hook and read/write adapters are not yet verified in a running game. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
+An engine-owned persistent style resource, reliable immediate Ink refresh and in-game theme application, minimap/world-map recoloring, main-menu DreamUI tile and a self-contained ASI loader. The **read-only serializer hook** reached 10 styles and three verified HDRColor values in the clean-game test; the new **clone-and-release experiment has not been tested in-game**. Default RED4ext.SDK relocation APIs still require RED4ext; DreamUI does not call them.
 
 An [optional HUD Painter exporter](docs/HUDPAINTER_COMPAT.md) can apply `.dream` palettes through HUD Painter in installations that already have it, without making HUD Painter a dependency of DreamUI's ASI.
 
