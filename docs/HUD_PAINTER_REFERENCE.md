@@ -48,7 +48,7 @@ The CDPR modding resource specifically labels **MainColors.PanelWhite** as **W.I
 
 Reference: https://github.com/CDPR-Modding-Documentation/Cyberpunk-Modding-Docs/blob/main/modding-guides/hud-painter-resource.md
 
-The shipped HUD Painter DEFAULT preset includes 92 main-theme entries and 10 Johnny-theme entries. Many native HDRColor channels exceed 1.0; #RRGGBB is fine for user-friendly SDR themes, but an engine-accurate patch/restore implementation must preserve full HDR float values (including alpha) and the Variant type.
+The shipped HUD Painter DEFAULT preset includes 92 main-theme entries and 10 Johnny-theme entries. The separate [Cyberpunk 2.5 Ink resource corpus](https://github.com/spuddeh/cp2077-ink-archive) shows the vanilla main colors resource has **10 direct styles, 10 themes and 2 overrides** *on disk*. The player's alpha.8 runtime observation of `styles=0` should not be treated as evidence that the original file has no styles. Many native HDRColor channels exceed 1.0; #RRGGBB is fine for user-friendly SDR themes, but an engine-accurate patch/restore implementation must preserve full HDR float values (including alpha) and the Variant type.
 
 ## DreamUI engineering decision
 

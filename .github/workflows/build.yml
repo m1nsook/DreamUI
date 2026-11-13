@@ -17,7 +17,7 @@ jobs:
       - name: Package default theme
         run: python tools/dreamtool.py pack themes/Default dist/Default.dream
       - name: Configure native ASI and tests
-        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+        run: cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON
       - name: Build native ASI
         run: cmake --build build --config Release
       - name: Test native ZIP reader
