@@ -206,6 +206,53 @@ uses script-side typed copying in `OnStyleLoaded` and typed resource
 assignment in `OnMainColorsReady`; raw C++ memory copying would not
 provide equivalent ownership.
 
+## Native engine-owned clone integration contract
+
+Codeware's MIT-licensed `Raw::ISerializable::Clone` reveals an
+alternative to manually rebuilding every `DynArray<inkStyle>` and
+`Variant`: REDengine can perform a typed object clone using its own
+resource allocator and RTTI. The published game address hash is
+`ISerializable_Clone = 2601784524`; the signature takes an owning
+output `Handle<ISerializable>&` and borrowed input
+`const Handle<ISerializable>&`.
+
+DreamUI now looks up this optional function in its **independent,
+build-fingerprinted game address database**, validating an executable
+`.text` location without calling it. The automatic loading log reports
+`clone_symbol=resolved|unavailable`. A missing clone symbol cannot
+enable an unsafe guess or fallback offset.
+
+The portable `InkOwnedCloneSession` also defines a strict backend
+boundary for a future authenticated native clone:
+- Run only inside a game-owned callback holding a strong serializer handle
+  for the exact `inkStyleResource` and path.
+- Clone via REDengine itself; then re-authenticate clone RTTI, path and
+  a nonempty, bounded independent style tree before retaining the output.
+- Release *every* partially created handle on failure and the successful
+  handle at the end of its lifetime through native `Handle` semantics,
+  including reference/weak-counting and allocator-aware destructor.
+- Never pretend a borrowed 16-byte Handle copy is a new strong reference.
+
+The SDK's `Handle<T>` destructor calls `DecRef()`, native
+`Handle_DecWeakRef`, `ISerializable::CanBeDestructed`, and
+allocator-aware `Memory::Delete` when appropriate. Calling
+`free`, `delete`, or hand-written raw-pointer release would be
+incorrect. The interface requires a backend capable of safely dispatching
+releases to the engine when the initiating callback is finished.
+
+**Status: the lifecycle contract and symbol lookup are implemented and
+mock-tested; the game-specific clone/backend is NOT wired or invoked.**
+The log deliberately says `clone_owner_backend=not_wired`. No new
+marker, active clone, engine-memory write, or PostLoad call is added.
+A resolved hash alone is not proof that a clone succeeds or that the game
+will accept a subsequent refresh.
+
+References:
+- [Codeware `Raw::ISerializable::Clone`](https://github.com/psiberx/cp2077-codeware/blob/main/src/Red/Scripting.hpp)
+- [Codeware address map](https://github.com/psiberx/cp2077-codeware/blob/main/src/Red/Shared/AddressLib.hpp)
+- [RED4ext.SDK `Handle.hpp`](https://github.com/wopss/RED4ext.SDK/blob/master/include/RED4ext/Handle.hpp)
+- [RED4ext.SDK `SharedPtr.hpp`](https://github.com/wopss/RED4ext.SDK/blob/master/include/RED4ext/Memory/SharedPtr.hpp)
+
 ## Why a live refresh needs an owning style snapshot
 
 A source-level review of **the owner's HUD Painter 1.4.1 ZIP** and
