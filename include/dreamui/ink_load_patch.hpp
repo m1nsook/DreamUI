@@ -80,6 +80,33 @@ struct InkLoadInspection {
     std::uint32_t styles=0;
 };
 
+// A bounded, plugin-owned copy of validated HDRColor property VALUES.
+// It deliberately contains NO native pointers or borrowed game memory.
+// Style identity and state CNames are copied as 64-bit values, not strings.
+// This is NOT a deep clone of inkStyle or Variant; it cannot be assigned
+// back to an emptied inkStyleResource or refresh already-instantiated UI.
+struct InkOwnedColorEntry {
+    std::uint64_t style_id=0;
+    std::uint64_t style_state=0;
+    std::uint64_t property_hash=0;
+    std::uint32_t style_index=0;
+    std::uint32_t property_index=0;
+    HdrColor original{};
+    HdrColor proposed{};
+};
+struct InkOwnedColorPreimage {
+    std::uint64_t resource_path_hash=0;
+    std::uint64_t resource_instance_id=0; // identifier, NEVER an address
+    std::uint32_t style_count=0;
+    std::uint32_t entry_count=0;
+    std::array<InkOwnedColorEntry,32> entries{};
+    bool valid() const noexcept {
+        return resource_path_hash!=0 && resource_instance_id!=0 &&
+               style_count!=0 && entry_count>0 && entry_count<=entries.size();
+    }
+    void clear() noexcept { *this={}; }
+};
+
 struct InkPaletteEntry {
     std::string_view native_property;
     Rgb theme_color;
@@ -90,7 +117,8 @@ InkLoadInspection inspect_loaded_ink_palette(
     const MemoryRead& reader,
     std::uint64_t style_resource,
     std::uint64_t resource_path_hash_expected,
-    std::span<const InkPaletteEntry> targets);
+    std::span<const InkPaletteEntry> targets,
+    InkOwnedColorPreimage* owned_preimage = nullptr);
 
 // Atomically patch up to 16 distinct named native HDRColor properties.
 // All requested names must exist and pass verification before ANY write;
