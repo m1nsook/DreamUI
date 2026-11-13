@@ -141,5 +141,75 @@ int main(){
     result=patch_loaded_ink_color(read,write,resource,path,"MainColors.Red",selected);
     CHECK(result.status==InkLoadPatchStatus::Applied && result.matched==2 &&
           result.written==2);
+
+    // Record every successful color write so the same authenticated game
+    // resource can later restore ALL original HDRColor values exactly.
+    mem.put(resource,0x28,std::uint64_t(0xA1B2C3D4));
+    mem.put(storage,0,vanilla);
+    mem.put(storage2,0,second_vanilla);
+    InkLoadJournal journal{};
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::NoJournal);
+    result=patch_loaded_ink_color(read,write,resource,path,
+                                  "MainColors.Red",selected,&journal);
+    CHECK(result.status==InkLoadPatchStatus::Applied && journal.active() &&
+          journal.count==2);
+    CHECK(journal.entries[0].before==vanilla &&
+          journal.entries[1].before==second_vanilla);
+    const auto first_applied=journal.entries[0].applied;
+    const auto second_applied=journal.entries[1].applied;
+    CHECK(restore_loaded_ink_color(read,write,resource+1,journal)==
+          InkLoadRestoreStatus::StaleResource);
+    CHECK(patch_loaded_ink_color(read,write,resource,path,
+          "MainColors.Red",selected,&journal).status==
+          InkLoadPatchStatus::JournalOccupied);
+
+    // Object identity changes even at the same address: never write.
+    mem.put(resource,0x28,std::uint64_t(0xA1B2C3D5));
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::StaleResource);
+    mem.put(resource,0x28,std::uint64_t(0xA1B2C3D4));
+
+    // If another mod modifies a property after DreamUI, don't overwrite it.
+    mem.put(storage2,0,HdrColor{4.f,3.f,2.f,1.f});
+    const auto before_reject=mem.writes_seen;
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::ChangedExternally);
+    CHECK(mem.writes_seen==before_reject);
+    mem.put(storage2,0,second_applied);
+
+    // Property names must remain identical even if the Variant stays valid.
+    mem.put(properties2,0,cname_hash("MainColors.Blue"));
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::ChangedExternally);
+    mem.put(properties2,0,cname_hash("MainColors.Red"));
+
+    // If the native Variant allocation changes, don't write to a stale ptr.
+    mem.put(properties2,16,std::uint64_t(storage));
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::ChangedExternally);
+    mem.put(properties2,16,std::uint64_t(storage2));
+
+    // Native restore can partially fail. The rollback returns to the
+    // applied state, leaving a retryable journal with no mixed colors.
+    mem.fail_write_number=mem.writes_seen+2;
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::WriteFailed);
+    CHECK(journal.active());
+    CHECK(read(storage,&after,sizeof(after)) && after==first_applied);
+    CHECK(read(storage2,&second_after,sizeof(second_after)) &&
+          second_after==second_applied);
+    mem.fail_write_number=0;
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::Restored);
+    CHECK(read(storage,&after,sizeof(after)) && after==vanilla);
+    CHECK(read(storage2,&second_after,sizeof(second_after)) &&
+          second_after==second_vanilla);
+    // The owner of the resource lifetime, not the memory writer, clears
+    // a completed journal. A stale raw snapshot is never an owning handle.
+    journal.clear();
+    CHECK(!journal.active());
+    CHECK(restore_loaded_ink_color(read,write,resource,journal)==
+          InkLoadRestoreStatus::NoJournal);
     std::cout<<"Native Ink load-stage color transactions and failure rollback tests passed\n";
 }

@@ -47,10 +47,10 @@ including the write that may have *partially succeeded*.
   entry and CClass name == `inkStyleResource`
 - Reads only engine-owned objects from the live serializer's strong
   handles, never weak ResourceLoader cache pointers
-- Applies only the `MainColors.Red` property on the exact vanilla
-  `base\\gameplay\\gui\\common\\main_colors.inkstyle` resource, from
-  DreamUI's existing `text.primary` token. Other themes, including Johnny
-  and accessibility palettes, are excluded from this initial preview
+- Applies only three documented native properties from `text.primary`,
+  `text.secondary`, and `selection.active` on the exact vanilla
+  `base\\gameplay\\gui\\common\\main_colors.inkstyle` resource.
+  Other themes, including Johnny and accessibility palettes, are excluded
 - Uses MinHook **statically linked** under its BSD-2-Clause license;
   no DLL or installed framework is required
 
@@ -106,3 +106,58 @@ the styles array, an observer timing issue, or a wrong assumption about
 the runtime layout. The serializer-stage hook is intended to operate
 before such a runtime difference can erase the source data, but **that
 ordering is still unverified in the running game**.
+
+
+## Three native palette targets in one atomic load-stage transaction
+
+Rather than limiting the first standalone palette to the color key
+`MainColors.Red`, the experimental stage now applies all three
+verified DreamUI semantic mappings **atomically**:
+
+| .dream token | Native inkStyleProperty |
+| --- | --- |
+| `text.primary` | `MainColors.Red` |
+| `text.secondary` | `MainColors.PanelBlue` |
+| `selection.active` | `MainColors.ActiveYellow` |
+
+All three native properties must be found and have valid HDRColor
+Variants **before any write**. If one is missing, no colors are
+changed. A partial failure at the third property rolls back all three,
+including the property which returned a failed write after modifying
+memory. The full preimage is retained in an optional generation-bound
+journal for a later authenticated restore. Each native color's peak
+brightness and alpha are preserved.
+
+## Why a live refresh needs an owning style snapshot
+
+A source-level review of **the owner's HUD Painter 1.4.1 ZIP** and
+Codeware 1.21.2 establishes:
+
+1. In HUD Painter `HudPainterStorage.reds`, `OnStyleLoaded` copies
+   the engine's initial `resource.styles` into a separate owned
+   `defaultStyles` array **before post-load finalization**.
+2. For interactive preset changes, HUD Painter obtains a genuine game
+   resource handle with `ResourceDepot.LoadResource`, assigns the copied
+   `defaultStyles` back into `resource.styles`, replaces selected native
+   `Variant/HDRColor` fields, then calls `RefreshResource()`.
+3. `RefreshResource()` is **not an independent native engine function
+   that we must locate by name**. In Codeware's REDscript it delegates
+   to `ISerializable.ProcessPostLoad()`. The C++ implementation calls
+   `ISerializable::PostLoad({disablePreInitialization})`, a virtual
+   method in the RED4ext.SDK vtable at offset `0x28`.
+
+References:
+- https://github.com/psiberx/cp2077-codeware/blob/main/scripts/Scripting/ISerializable.reds
+- https://github.com/psiberx/cp2077-codeware/blob/main/src/App/Scripting/ISerializableEx.hpp
+- https://github.com/wopss/RED4ext.SDK/blob/master/include/RED4ext/ISerializable.hpp
+
+**Crucial:** merely invoking `PostLoad` on the style resource with
+`styles=0` will not recreate color properties. DreamUI needs a genuine
+engine-allocated, lifetime-safe copy of the styles/Variants and a
+game-owned callback context **before** it can safely issue an
+interactive refresh or a reliable immediate restoration. The initial
+load-stage patch needs no extra refresh call: the engine's own normal
+post-load work follows it. We do not invoke PostLoad twice.
+
+This work remains part of the standalone ASI and does not import
+Codeware or HUD Painter into the game.

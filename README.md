@@ -21,7 +21,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Manifest validation and 20 semantic color tokens.
 - Candidate Ink binding table and **mock-only** reversible RGB apply/restore logic.
 - **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested.
-- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, HDRColor load-stage transactions, and rollback. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and restore are verified.
+- **Conditional native serializer-stage bridge:** initial C++ engine-hook implementation backed by a strong serializer-owned handle, native RTTI verification, atomic three-property HDRColor load-stage transactions, journaled rollback, and guarded exact-instance restoration. It is compiled in CI but **disabled in ordinary builds** until live safety, refresh and restore are verified.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.

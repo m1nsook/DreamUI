@@ -40,3 +40,16 @@ RED4ext.SDK headers and third-party scripts are useful research references, but 
 ## C++ typed lifecycle model under development
 
 DreamUI now has an independently authored, unit-tested `NativeInkColorSession` which accepts authenticated Loaded/Ready/Unloaded events, retains exact `HDRColor` original values, gates native actions to the game thread, refreshes when applying/restoring, and keeps a rollback journal after partial failures. **No live engine callback or writer backend is connected to the ASI**. Read the [native lifecycle contract](NATIVE_RESOURCE_LIFECYCLE.md) before enabling any patch.
+
+
+## Native PostLoad mechanism found in the supplied Codeware distribution
+
+HUD Painter's live preset switching works by restoring its separately
+cached native `inkStyle` array to the resource and requesting
+`RefreshResource()`. This convenience method is defined by Codeware
+as a call to native `ISerializable::PostLoad`, whose virtual slot is
+documented in RED4ext.SDK. Therefore DreamUI can eventually perform
+the same operation independently, **but only after holding a real
+owning resource handle and native-allocator-backed style arrays**.
+Simply calling the virtual method against the earlier `styles=0`
+snapshot would be unsafe and ineffective.

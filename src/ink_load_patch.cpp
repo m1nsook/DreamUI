@@ -31,6 +31,8 @@ struct Saved {
     std::uint64_t address=0;
     HdrColor before{};
     HdrColor after{};
+    std::uint64_t type=0,property_hash=0;
+    std::uint32_t style_index=0,property_index=0;
 };
 bool is_color_type(const MemoryRead& r,std::uint64_t type) {
     if(type<0x10000 || (type&1))return false;
@@ -45,25 +47,39 @@ bool same_color(const HdrColor& a,const HdrColor& b) {
 }
 } // namespace
 
-InkLoadPatchResult patch_loaded_ink_color(
+InkLoadPatchResult patch_loaded_ink_palette(
     const MemoryRead& read,const MemoryWrite& write,
     std::uint64_t resource,std::uint64_t path,
-    std::string_view property,Rgb selected) {
+    std::span<const InkPaletteEntry> targets,
+    InkLoadJournal* journal) {
     InkLoadPatchResult out;
+    if(journal && journal->active()) {
+        out.status=InkLoadPatchStatus::JournalOccupied;return out;
+    }
     if(!read || !write || resource<0x10000 || !path ||
-       property.empty() || property.size()>128)
+       targets.empty() || targets.size()>16)
         return out;
+    std::array<std::uint64_t,16> hashes{};
+    std::array<bool,16> found{};
+    for(std::size_t i=0;i<targets.size();++i) {
+        const auto property=targets[i].native_property;
+        if(property.empty() || property.size()>128)return out;
+        const auto hash=cname_hash(property);
+        for(std::size_t j=0;j<i;++j)if(hashes[j]==hash)return out;
+        hashes[i]=hash;
+    }
     std::array<std::uint8_t,0x50> header{};
     if(!read_at(read,resource,0,header.data(),header.size()) ||
        u64(header.data(),0x30)!=path)
         return out;
 
+    const auto resource_id=u64(header.data(),0x28);
+    if(journal && !resource_id)return out; // verified serializer ID required
     Array styles{};
     if(!array_at(header.data(),0x40,32,styles))return out;
     if(!styles.size) {out.status=InkLoadPatchStatus::NoStyles;return out;}
 
     std::array<Saved,32> snapshots{};
-    const auto target=cname_hash(property);
     for(std::uint32_t si=0;si<styles.size;++si) {
         std::array<std::uint8_t,0x20> style{};
         if(!read_at(read,styles.ptr,static_cast<std::uint64_t>(si)*0x20,
@@ -74,7 +90,12 @@ InkLoadPatchResult patch_loaded_ink_color(
             std::array<std::uint8_t,0x20> item{};
             if(!read_at(read,properties.ptr,static_cast<std::uint64_t>(pi)*0x20,
                         item.data(),item.size()))return out;
-            if(u64(item.data(),0)!=target)continue;
+            const auto property_hash=u64(item.data(),0);
+            auto hit=std::find(hashes.begin(),hashes.begin()+targets.size(),property_hash);
+            if(hit==hashes.begin()+targets.size())continue;
+            const auto index=static_cast<std::size_t>(hit-hashes.begin());
+            found[index]=true;
+            const Rgb selected=targets[index].theme_color;
             if(out.matched==snapshots.size()) {out.status=InkLoadPatchStatus::InvalidProperty;return out;}
             const auto type=u64(item.data(),0x8);
             const auto address=u64(item.data(),0x10);
@@ -103,7 +124,12 @@ InkLoadPatchResult patch_loaded_ink_color(
             if(!finite_hdr(desired)) {
                 out.status=InkLoadPatchStatus::InvalidProperty;return out;
             }
-            snapshots[out.matched++]={address,current,desired};
+            snapshots[out.matched++]={address,current,desired,type,property_hash,si,pi};
+        }
+    }
+    for(std::size_t i=0;i<targets.size();++i) {
+        if(!found[i]) {
+            out.status=InkLoadPatchStatus::NoMatchingProperty;return out;
         }
     }
     if(out.matched==0) {
@@ -148,7 +174,101 @@ InkLoadPatchResult patch_loaded_ink_color(
         }
         ++out.written;
     }
+    if(journal) {
+        journal->resource_address=resource;
+        journal->resource_path_hash=path;
+        journal->resource_instance_id=resource_id;
+        journal->count=out.matched;
+        for(std::uint32_t i=0;i<out.matched;++i) {
+            const auto& e=snapshots[i];
+            journal->entries[i]={
+                e.address,e.type,e.property_hash,e.style_index,e.property_index,e.before,e.after
+            };
+        }
+    }
     out.status=InkLoadPatchStatus::Applied;
     return out;
+}
+
+InkLoadPatchResult patch_loaded_ink_color(
+    const MemoryRead& read,const MemoryWrite& write,
+    std::uint64_t resource,std::uint64_t path,
+    std::string_view property,Rgb selected,InkLoadJournal* journal) {
+    const std::array<InkPaletteEntry,1> one{{{property,selected}}};
+    return patch_loaded_ink_palette(read,write,resource,path,one,journal);
+}
+
+// Do not invoke outside an authenticated engine-owned callback. This
+// function cannot acquire ownership or make a raw pointer safe by itself.
+InkLoadRestoreStatus restore_loaded_ink_color(
+    const MemoryRead& read,const MemoryWrite& write,
+    std::uint64_t resource,const InkLoadJournal& journal) {
+    if(!journal.active())return InkLoadRestoreStatus::NoJournal;
+    if(!read || !write || resource<0x10000)
+        return InkLoadRestoreStatus::InvalidResource;
+    if(resource!=journal.resource_address ||
+       !journal.resource_path_hash || !journal.resource_instance_id ||
+       journal.count>journal.entries.size())
+        return InkLoadRestoreStatus::StaleResource;
+    std::array<std::uint8_t,0x50> header{};
+    if(!read_at(read,resource,0,header.data(),header.size()) ||
+       u64(header.data(),0x30)!=journal.resource_path_hash ||
+       u64(header.data(),0x28)!=journal.resource_instance_id)
+        return InkLoadRestoreStatus::StaleResource;
+    Array styles{};
+    if(!array_at(header.data(),0x40,32,styles))
+        return InkLoadRestoreStatus::InvalidResource;
+
+    // Complete validation before the first native write. If any property
+    // changed after we patched it, don't overwrite another mod's work.
+    for(std::uint32_t i=0;i<journal.count && i<journal.entries.size();++i) {
+        const auto& entry=journal.entries[i];
+        if(entry.style_index>=styles.size)return InkLoadRestoreStatus::ChangedExternally;
+        std::array<std::uint8_t,0x20> style{};
+        if(!read_at(read,styles.ptr,std::uint64_t(entry.style_index)*0x20,
+                    style.data(),style.size()))
+            return InkLoadRestoreStatus::InvalidResource;
+        Array props{};
+        if(!array_at(style.data(),0x10,1024,props))
+            return InkLoadRestoreStatus::InvalidResource;
+        if(entry.property_index>=props.size)
+            return InkLoadRestoreStatus::ChangedExternally;
+        std::array<std::uint8_t,0x20> item{};
+        if(!read_at(read,props.ptr,std::uint64_t(entry.property_index)*0x20,
+                    item.data(),item.size()))
+            return InkLoadRestoreStatus::InvalidResource;
+        if(u64(item.data(),0)!=entry.property_path_hash ||
+           u64(item.data(),8)!=entry.type_address ||
+           u64(item.data(),16)!=entry.color_address ||
+           !is_color_type(read,entry.type_address))
+            return InkLoadRestoreStatus::ChangedExternally;
+        HdrColor current{};
+        if(!read_at(read,entry.color_address,0,&current,sizeof(current)) ||
+           !same_color(current,entry.applied))
+            return InkLoadRestoreStatus::ChangedExternally;
+    }
+
+    for(std::uint32_t i=0;i<journal.count;++i) {
+        const auto& e=journal.entries[i];
+        HdrColor current{};
+        if(!write(e.color_address,&e.before,sizeof(e.before)) ||
+           !read_at(read,e.color_address,0,&current,sizeof(current)) ||
+           !same_color(current,e.before)) {
+            // Bring all previously touched slots back to our applied state,
+            // to keep the journal coherent and permit a later restore retry.
+            bool rollback_ok=true;
+            for(std::uint32_t j=0;j<=i;++j) {
+                const auto& prev=journal.entries[j];
+                HdrColor check{};
+                if(!write(prev.color_address,&prev.applied,sizeof(prev.applied)) ||
+                   !read_at(read,prev.color_address,0,&check,sizeof(check)) ||
+                   !same_color(check,prev.applied))
+                    rollback_ok=false;
+            }
+            return rollback_ok ? InkLoadRestoreStatus::WriteFailed
+                               : InkLoadRestoreStatus::RollbackFailed;
+        }
+    }
+    return InkLoadRestoreStatus::Restored;
 }
 }

@@ -89,6 +89,12 @@ An actual standalone game integration still needs independently verified:
 4. End-to-end apply and restore, including rollback after reload/unload
    and interaction with other UI mods.
 
+The load-stage transaction has since gained a full `InkLoadJournal` and
+an exact-instance guarded restoration operation, tested with multiple
+properties and partially failed writes. Neither mechanism by itself grants
+a persistent game resource handle or guarantees immediate UI refresh.
+See [native serializer-stage design](NATIVE_SERIALIZER_STAGE.md).
+
 Only after those prerequisites are met should DreamUI publish another
 game-testing prerelease or turn on memory-changing behavior. The current
 alpha.8 remains the safe read-only release.

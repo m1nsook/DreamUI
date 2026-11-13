@@ -16,5 +16,10 @@ bool start_native_resource_stage(
     const Theme& theme,
     std::ostream& log) noexcept;
 
+// These commands change intent only. Game memory is touched solely by
+// a later authenticated serializer callback. They do NOT immediately refresh
+// already-instantiated Ink widgets.
+bool native_resource_stage_request_apply() noexcept;
+bool native_resource_stage_request_restore() noexcept;
 std::string native_resource_stage_status();
 }
