@@ -41,7 +41,7 @@ int main() {
     constexpr std::uint64_t p1=0x300000,p2=0x310000;
     constexpr std::uint64_t rtti=0x400000,other_rtti=0x410000;
     constexpr std::uint64_t c1=0x500000,c2=0x510000,c3=0x520000;
-    constexpr auto path=resource_path_hash(R"(base\gameplay\gui\common\main_colors.inkstyle)");
+    const auto path=resource_path_hash(R"(base\gameplay\gui\common\main_colors.inkstyle)");
     for(auto [addr,bytes]:std::array<std::pair<std::uint64_t,std::size_t>,9>{{
         {resource,0xC0},{styles,0x40},{p1,0x40},{p2,0x20},
         {rtti,0x80},{other_rtti,0x80},{c1,0x20},{c2,0x20},{c3,0x20}
