@@ -5,6 +5,7 @@
 #include "dreamui/pe_probe.hpp"
 #include "dreamui/address_db.hpp"
 #include "dreamui/ink_cache.hpp"
+#include "dreamui/ink_graph.hpp"
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -172,9 +173,32 @@ void log_executable_probe(const std::filesystem::path& executable, std::ostream&
             << " themes=" << style.themes
             << " overrides=" << style.overrides
             << " imports=" << style.imports << "\n";
+        // main_colors.inkstyle often owns only theme/override references
+        // (the owner's actual alpha.8 log had styles=0, themes=10).
+        // Follow already-loaded native Ref<inkStyleResource> dependencies,
+        // without issuing new resource requests or modifying any handle.
+        if (style.cached_resource_address != 0) {
+            const auto graph = inspect_ink_style_graph(
+                reader,style.cached_resource_address,
+                resource_path_hash(R"(base\gameplay\gui\common\main_colors.inkstyle)"),
+                "MainColors.Red");
+            log << "Ink linked style graph: " << graph.reason
+                << " resources=" << graph.resources_visited
+                << " references=" << graph.references_seen
+                << " loaded=" << graph.references_loaded
+                << " styles=" << graph.styles_visited
+                << " properties=" << graph.properties_visited << "\n";
+            if (graph.found_color) {
+                log << std::fixed << std::setprecision(5)
+                    << "Linked MainColors.Red read-only HDRColor (no owning handle): "
+                    << graph.color.red << ", " << graph.color.green << ", "
+                    << graph.color.blue << ", " << graph.color.alpha << "\n";
+                log.unsetf(std::ios::floatfield);
+            }
+        }
         if (style.status == InkCacheProbe::Status::PropertyCandidate) {
             log << std::fixed << std::setprecision(5)
-                << "MainColors.Red candidate RGBA (RTTI not verified): "
+                << "MainColors.Red read-only RTTI-checked color (no owning handle): "
                 << style.rgba[0] << ", " << style.rgba[1] << ", "
                 << style.rgba[2] << ", " << style.rgba[3] << "\n";
             log.unsetf(std::ios::floatfield);

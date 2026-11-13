@@ -114,6 +114,7 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
                 return failure("inkStyleResource header unreadable");
             if(u64(resource_header.data(),0x30)!=key)
                 return failure("resource object path does not match requested style");
+            out.cached_resource_address=resource; // no ownership; never write via this pointer
             const auto styles=u64(resource_header.data(),0x40);
             const auto style_capacity=u32(resource_header.data(),0x48);
             const auto style_size=u32(resource_header.data(),0x4c);
@@ -158,21 +159,27 @@ InkCacheProbe inspect_ink_cache(const MemoryRead& read,
                     if(u64(item.data(),0)!=property_hash)continue;
                     out.found_property=true;
                     const auto tag=u64(item.data(),0x8);
-                    // SDK Variant: the low bit marks an inlined value. The
-                    // remaining bits point to rtti::IType. For HDRColor the
-                    // class descriptor has CClass.name at +0x18, native size
-                    // at +0x68 and alignment at +0x74.
-                    if((tag&1)==0 || (tag&~1ULL)<0x10000)
-                        return failure("matching Ink Variant is not a valid inline value");
+                    // RED4ext.SDK NativeTypes-inl.hpp: Variant stores values
+                    // inline only when alignment <= 8. HDRColor is 16-byte
+                    // aligned, so it MUST be an externally allocated value.
+                    // A tagged inline HDRColor is structurally impossible.
+                    if((tag&1)!=0 || tag<0x10000)
+                        return failure("HDRColor Variant must use external aligned storage");
                     std::array<std::uint8_t,0x78> rtti{};
-                    if(!read_range(read,tag&~1ULL,0,rtti.data(),rtti.size()))
+                    if(!read_range(read,tag,0,rtti.data(),rtti.size()))
                         return failure("matching Ink Variant RTTI unreadable");
                     if(u64(rtti.data(),0x18)!=cname_hash("HDRColor") ||
                        u32(rtti.data(),0x68)!=0x10 ||
                        u32(rtti.data(),0x74)!=0x10)
                         return failure("matching Ink Variant RTTI is not HDRColor");
+                    // The Variant's union contains a POINTER at +0x10, not
+                    // the four float values. Honor that engine allocation.
+                    const auto storage=u64(item.data(),0x10);
+                    if(storage<0x10000 || (storage&0xF)!=0)
+                        return failure("HDRColor Variant storage pointer not 16-byte aligned");
                     HdrColor rgba{};
-                    std::memcpy(&rgba,item.data()+0x10,sizeof(rgba));
+                    if(!read_range(read,storage,0,&rgba,sizeof(rgba)))
+                        return failure("HDRColor external storage unreadable");
                     if(!finite_hdr(rgba))
                         return failure("matching HDRColor contains non-finite/invalid floats");
                     const float channels[4]={rgba.red,rgba.green,rgba.blue,rgba.alpha};

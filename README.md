@@ -23,7 +23,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - **Native typed HDRColor lifecycle core:** game-resource event identity/generation checks, engine-thread gate, exact four-float snapshot, one-property transaction, refresh, restoration and rollback retry; mock-tested, **not connected to the game's event system yet**.
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
-- On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection as often as needed in one game session, with a separate per-session probe log.
+- On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including a bounded traversal of loaded themes/overrides/imports, with RTTI-checked external HDRColor storage. No game writes.
 - Native DreamCatalog model for listing installed themes, version display and choosing a fallback active theme; **no menu widget yet**.
 - GitHub Actions tests and Windows x64 prereleases.
 

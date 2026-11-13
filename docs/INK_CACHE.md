@@ -34,3 +34,29 @@ A valid cached resource lookup and an RTTI-authenticated `HDRColor` read on the 
 ## New read-only RTTI validation
 
 A matching Ink property no longer qualifies simply because its first four value slots look like floats. DreamUI checks the inline Variant bit and reads the engine's RTTI descriptor, requiring the `HDRColor` CName, 16-byte size, and 16-byte alignment. Fake-memory tests include wrong RTTI types and non-inline variants. A matching descriptor is not sufficient for safe modification from the Tab worker thread. See [native lifecycle contract](NATIVE_RESOURCE_LIFECYCLE.md).
+
+## Corrected native Variant storage
+
+RED4ext.SDK NativeTypes-inl.hpp shows Variant::CanBeInlined requires
+alignment <= 8, while HDRColor is alignas(16), size 16.
+**Therefore a real native HDRColor Variant is externally allocated**:
+Variant.type at +0x00 has no InlineFlag, and Variant.instance at +0x08
+is a 16-byte-aligned pointer to the four float channels. A previous
+read-only inspector incorrectly treated it as inline and could never
+read a real HDRColor. That test fixture was corrected.
+
+## Linked style resources
+
+The main_colors.inkstyle resource can contain zero direct styles and
+nonempty arrays of native inkStyleTheme and inkStyleOverride references.
+The new bounded, read-only traversal follows only already-loaded
+Ref<inkStyleResource> entries in themes/overrides/imports, checks token
+path identities, strong reference counts, completion/error states, and
+child resource paths, then searches their style properties for
+MainColors.Red with authenticated external HDRColor storage.
+
+The walk has depth, reference, style and property limits and a
+cycle-detection set; failures disable observation rather than editing
+memory. It does not acquire owning handles, refresh the game UI, or
+install a Resource/Loaded callback. It does not qualify as a live
+theme implementation.
