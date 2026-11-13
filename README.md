@@ -25,6 +25,7 @@ DreamUI aims to improve Cyberpunk's native HUD, world map, minimap markers, item
 - Read-only Windows executable metadata probe with bounded PE parser and tests.
 - Independent linker-map resolver: safely reads the game-provided address table, checks timestamps/section bounds and reads the ResourceLoader singleton after startup and safely inspects the cached Ink resource metadata without invoking game functions.
 - On-demand **Tab** diagnostic (no timed polls): read-only cached Ink style inspection, including bounded linked-resource traversal. No game writes.
+- **Pointer-free first-load color capture:** the guarded native hook can retain verified original HDRColor values and style identities in DreamUI-owned memory, without retaining unsafe engine pointers. This is not a copy of the full Ink styles array or an instant restore.
 - **Automatic experimental native load trace:** in an opt-in source build, capture guarded serializer-stage callback and style preflight counters to `DreamUI-load.log` as the game loads, without Tab or developer commands. No native writes in observation mode; installing a native hook still carries risk.
 - A headless developer command registry/inbox adapted from the owner's DreamUI prototype; supports manual screen-phase labels without an ImGui/DX12 overlay.
 - **Validated theme selection:** `select <theme-id>` chooses from installed `.dream` packages, saves an active-theme preference, and supplies the theme's colors to the guarded native bridge at the next authenticated resource load; not instant switching.
