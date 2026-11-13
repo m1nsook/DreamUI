@@ -488,13 +488,23 @@ bool start_native_resource_stage(
         // Determine marker permissions once. The clone marker is
         // independent: it allocates and releases a temporary engine object,
         // and is explicitly disallowed when native writes are enabled.
+        // Shipping alpha.9 has neither permission compiled in. Marker
+        // files ALONE cannot enable native color writes or Clone allocation.
+#if defined(DREAMUI_ENABLE_NATIVE_WRITES)
         const bool write_mode=std::filesystem::is_regular_file(
             home/L"dev"/L"native-ink-write.enable");
+#else
+        const bool write_mode=false;
+#endif
+#if defined(DREAMUI_ENABLE_NATIVE_CLONE)
         const bool clone_mode=!write_mode &&
             std::filesystem::is_regular_file(
                 home/L"dev"/L"native-ink-clone.enable") &&
             s_clone_symbol_resolved.load(std::memory_order_acquire) &&
             s_clone_release_symbol_resolved.load(std::memory_order_acquire);
+#else
+        const bool clone_mode=false;
+#endif
         s_clone_requested.store(clone_mode,std::memory_order_release);
         s_write_mode.store(write_mode,std::memory_order_release);
         s_installed.store(true,std::memory_order_release);
@@ -596,6 +606,18 @@ std::string native_resource_stage_status() {
            " full_tree_unsupported="+std::to_string(s_full_tree_unsupported.load())+
            " clone_symbol="+(s_clone_symbol_resolved.load()?"resolved":"unavailable")+
            " clone_release_symbol="+(s_clone_release_symbol_resolved.load()?"resolved":"unavailable")+
+           " write_backend="+
+#if defined(DREAMUI_ENABLE_NATIVE_WRITES)
+           std::string("compiled")+
+#else
+           std::string("locked_out")+
+#endif
+           " clone_backend="+
+#if defined(DREAMUI_ENABLE_NATIVE_CLONE)
+           std::string("compiled")+
+#else
+           std::string("locked_out")+
+#endif
            " clone_probe="+clone_probe_status_name(s_clone_outcome.load())+
            " clone_attempted="+std::to_string(s_clone_attempted.load()?1:0)+
            " clone_styles="+std::to_string(s_clone_observed_styles.load())+
