@@ -11,8 +11,8 @@ The owner's in-game alpha.5 log proves DreamUI's validated ResourceLoader global
 3. Copy the 0x30-byte `ResourceLoader.tokens` HashMap header using a guarded `ReadProcessMemory` callback.
 4. Calculate a `ResourcePath` FNV-1a64 hash for `base\gameplay\gui\common\main_colors.inkstyle`. Read only its expected bucket and at most 128 chain nodes. Validate bounds, counts, stride, keys and weak token reference.
 5. If cached and still referenced, copy the matching `ResourceToken` header, examine `finished`/`error` and its resource handle.
-6. If loaded, copy `inkStyleResource` metadata (`styles` array at +0x40). For each style, inspect bounded property entries and search for the `CName` hash of `MainColors.PanelWhite`.
-7. If a matching property uses an apparently inlined Variant, log the four potential HDRColor float components, **explicitly unverified until RTTI confirms the Variant type**.
+6. If loaded, copy `inkStyleResource` metadata (`styles` array at +0x40). For each style, inspect bounded property entries and search for the `CName` hash of `MainColors.Red`.
+7. If a matching property uses an inlined Variant, validate the RTTI CClass name/size/alignment against `HDRColor` before reading its four float channels. A read-only type match still cannot grant ownership of the resource.
 
 No game engine functions, memory writes, hook insertion, reference counting operations or locks are performed. Read errors and structural inconsistencies are failures, not fatal game exceptions. The cache may change concurrently and a transient miss is not a correctness guarantee.
 
@@ -30,3 +30,7 @@ DreamUI's cache reader and tests are independently authored. No licensed game as
 ## Next acceptance
 
 A valid cached resource lookup and an RTTI-authenticated `HDRColor` read on the user's installed game build. If the resource is never cached, use an engine-supported load request on an appropriate game thread only after safely verifying its calling convention and lifetime. Then implement the first rollback-safe color override. Continue using the game's existing Ink UI, not a new overlay.
+
+## New read-only RTTI validation
+
+A matching Ink property no longer qualifies simply because its first four value slots look like floats. DreamUI checks the inline Variant bit and reads the engine's RTTI descriptor, requiring the `HDRColor` CName, 16-byte size, and 16-byte alignment. Fake-memory tests include wrong RTTI types and non-inline variants. A matching descriptor is not sufficient for safe modification from the Tab worker thread. See [native lifecycle contract](NATIVE_RESOURCE_LIFECYCLE.md).

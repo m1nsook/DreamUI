@@ -29,11 +29,11 @@ struct FakeMemory {
 int main() {
     constexpr std::uint64_t loader=0x100000, index=0x200000, nodes=0x300000;
     constexpr std::uint64_t token=0x400000, refs=0x500000, resource=0x600000;
-    constexpr std::uint64_t styles=0x700000, props=0x800000;
+    constexpr std::uint64_t styles=0x700000, props=0x800000, rtti=0x900000;
     FakeMemory mem;
-    for(auto [start,length]:std::array<std::pair<std::uint64_t,std::size_t>,8>{
+    for(auto [start,length]:std::array<std::pair<std::uint64_t,std::size_t>,9>{
         {{loader,0x80},{index,32},{nodes,0x100},{token,0x60},{refs,8},
-         {resource,0xc0},{styles,0x20},{props,0x20}}})
+         {resource,0xc0},{styles,0x20},{props,0x20},{rtti,0x80}}})
         mem.region(start,length);
     const auto path=std::string("base\\gameplay\\gui\\common\\main_colors.inkstyle");
     const auto key=dreamui::resource_path_hash(path);
@@ -54,15 +54,31 @@ int main() {
     mem.put(resource,0x48,1u);mem.put(resource,0x4c,1u);
     mem.put(styles,0x10,props);mem.put(styles,0x18,1u);mem.put(styles,0x1c,1u);
     mem.put(props,0,dreamui::cname_hash("MainColors.Red"));
-    mem.put(props,8,static_cast<std::uint64_t>(0x900001));
-    float floats[4]={0.8f,0.9f,1.0f,1.0f};
+    mem.put(props,8,static_cast<std::uint64_t>(rtti|1));
+    mem.put(rtti,0x18,dreamui::cname_hash("HDRColor"));
+    mem.put(rtti,0x68,static_cast<std::uint32_t>(16));
+    mem.put(rtti,0x74,static_cast<std::uint32_t>(16));
+    float floats[4]={2.8f,0.9f,1.0f,1.0f};
     mem.copy(props,16,floats,sizeof floats);
     const auto reader=[&](auto a,void* out,auto n){return mem.read(a,out,n);};
     using State=dreamui::InkCacheProbe::Status;
     auto result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::PropertyCandidate || !result.found_token ||
        !result.found_property || result.styles!=1 ||result.properties!=1 ||
-       result.rgba[0]!=0.8f){std::cerr<<"expected property candidate: "<<result.reason<<'\n';return 1;}
+       !result.hdr_type_match || result.rgba[0]!=2.8f){std::cerr<<"expected property candidate: "<<result.reason<<'\n';return 1;}
+    // The same four floats are NOT a color if the Variant RTTI says otherwise.
+    mem.put(rtti,0x18,dreamui::cname_hash("Vector4"));
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
+    if(result.status!=State::Invalid || result.hdr_type_match)return 1;
+    mem.put(rtti,0x18,dreamui::cname_hash("HDRColor"));
+    mem.put(rtti,0x68,static_cast<std::uint32_t>(8));
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
+    if(result.status!=State::Invalid)return 1;
+    mem.put(rtti,0x68,static_cast<std::uint32_t>(16));
+    mem.put(props,8,static_cast<std::uint64_t>(rtti)); // not inline
+    result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
+    if(result.status!=State::Invalid)return 1;
+    mem.put(props,8,static_cast<std::uint64_t>(rtti|1));
     mem.put(resource,0x4c,0u);
     result=dreamui::inspect_ink_cache(reader,loader,path,"MainColors.Red");
     if(result.status!=State::EmptyStyles || !result.found_token ||

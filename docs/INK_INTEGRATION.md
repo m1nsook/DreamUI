@@ -36,3 +36,7 @@ No more in-game diagnosis based solely on timeouts or the presence of a style-fi
 ## Dependencies and licensing
 
 RED4ext.SDK headers and third-party scripts are useful research references, but RED4ext's default UniversalReloc requires RED4ext.dll. Do not redistribute HUD Painter's scripts, compiled archive, native dependencies or paid assets as DreamUI. All DreamUI implementation must be independently authored, and fallback must safely disable changes on unsupported game builds.
+
+## C++ typed lifecycle model under development
+
+DreamUI now has an independently authored, unit-tested `NativeInkColorSession` which accepts authenticated Loaded/Ready/Unloaded events, retains exact `HDRColor` original values, gates native actions to the game thread, refreshes when applying/restoring, and keeps a rollback journal after partial failures. **No live engine callback or writer backend is connected to the ASI**. Read the [native lifecycle contract](NATIVE_RESOURCE_LIFECYCLE.md) before enabling any patch.
