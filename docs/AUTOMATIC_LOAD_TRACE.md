@@ -57,6 +57,14 @@ in-game dev window.
 - `owned_original_colors` and `source_styles`: number of validated
   HDRColor values and source styles retained as pointer-free data on the
   first successful preflight; not an owning resource or full style clone.
+- `full_tree_capture`, `full_tree_attempts`, `full_tree_styles`,
+  `full_tree_colors`, `full_tree_inspected`, `full_tree_unsupported`:
+  status and coverage of the optional **complete style-tree** capture.
+  `captured` means all styles and their properties were verified as
+  externally allocated `HDRColor` values and copied into DreamUI-owned
+  memory; `unsupported_variant` means at least one native property needs
+  a type-aware engine copier. A failed capture retains **no partial tree**.
+  Neither outcome proves safe game-side rehydration or an Ink refresh.
 - `last_matched_properties`: validated matching HDRColor properties
   from the most recent target preflight.
 - `preflight_ready`, `preflight_no_styles`, `preflight_missing`, and

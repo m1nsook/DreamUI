@@ -2,6 +2,7 @@
 #include <windows.h>
 #include "dreamui/win_load_hook.hpp"
 #include "dreamui/ink_load_patch.hpp"
+#include "dreamui/ink_style_snapshot.hpp"
 #include "dreamui/address_db.hpp"
 #include "dreamui/pe_probe.hpp"
 #include <algorithm>
@@ -13,6 +14,7 @@
 #include <span>
 #include <string>
 #include <vector>
+#include <utility>
 #if defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
 #include <MinHook.h>
 #endif
@@ -40,6 +42,15 @@ std::mutex s_palette_lock;
 // Value-only first-load capture. Do not store engine allocation addresses.
 // The serializer callback and theme selector use the same palette lock.
 InkOwnedColorPreimage s_first_color_preimage{};
+// A complete, value-owned style tree is retained only if EVERY native
+// Variant is an authenticated HDRColor. No foreign allocator pointers.
+InkOwnedStyleTree s_full_style_tree{};
+std::atomic<std::uint32_t> s_full_tree_attempts{0};
+std::atomic<int> s_full_tree_status{-1};
+std::atomic<std::uint32_t> s_full_tree_observed_properties{0};
+std::atomic<std::uint32_t> s_full_tree_unsupported{0};
+std::atomic<std::uint32_t> s_full_tree_styles{0};
+std::atomic<std::uint32_t> s_full_tree_colors{0};
 std::atomic<std::uint32_t> s_owned_color_entries{0};
 std::atomic<std::uint32_t> s_owned_source_styles{0};
 std::atomic<std::uint32_t> s_applied{0};
@@ -135,6 +146,40 @@ bool verified_style_type(std::uint64_t object) {
     return safe_read(reinterpret_cast<std::uintptr_t>(type),meta.data(),meta.size()) &&
            u64(meta.data(),0x18)==cname_hash("inkStyleResource");
 }
+const char* style_capture_status_name(int status) noexcept {
+    switch(static_cast<InkStyleCaptureStatus>(status)) {
+        case InkStyleCaptureStatus::Captured: return "captured";
+        case InkStyleCaptureStatus::NoStyles: return "no_styles";
+        case InkStyleCaptureStatus::InvalidVariant: return "invalid_variant";
+        case InkStyleCaptureStatus::UnsupportedVariant: return "unsupported_variant";
+        case InkStyleCaptureStatus::LimitExceeded: return "limit_exceeded";
+        case InkStyleCaptureStatus::InvalidResource: return "invalid_resource";
+    }
+    return "not_attempted";
+}
+void maybe_capture_full_style_tree(const MemoryRead& read,
+                                   std::uint64_t object,std::uint64_t path) {
+    // Called under s_palette_lock after serializer RTTI, strong-handle,
+    // and exact resource path checks. Never copy a native DynArray header:
+    // all copied styles/properties are ordinary DreamUI-owned C++ values.
+    if(s_full_style_tree.complete())return;
+    InkOwnedStyleTree candidate{};
+    const auto result=capture_loaded_ink_style_tree(read,object,path,candidate);
+    ++s_full_tree_attempts;
+    s_full_tree_status.store(static_cast<int>(result.status),
+                             std::memory_order_release);
+    s_full_tree_observed_properties.store(result.observed_properties,
+                                          std::memory_order_release);
+    s_full_tree_unsupported.store(result.unsupported_properties,
+                                  std::memory_order_release);
+    if(result.status==InkStyleCaptureStatus::Captured && candidate.complete()) {
+        s_full_tree_styles.store(static_cast<std::uint32_t>(candidate.styles.size()),
+                                 std::memory_order_release);
+        s_full_tree_colors.store(static_cast<std::uint32_t>(candidate.properties.size()),
+                                 std::memory_order_release);
+        s_full_style_tree=std::move(candidate);
+    }
+}
 void handle_serializer(void* serializer) {
     if(!serializer || !s_enabled.load(std::memory_order_relaxed))return;
     std::array<std::uint8_t,0x10> array{};
@@ -181,6 +226,7 @@ void handle_serializer(void* serializer) {
                 s_owned_color_entries.store(captured.entry_count,std::memory_order_release);
                 s_owned_source_styles.store(captured.style_count,std::memory_order_release);
             }
+            maybe_capture_full_style_tree(read,object,path);
             s_last_target_styles.store(inspection.styles,std::memory_order_relaxed);
             s_last_matched_properties.store(inspection.matched,std::memory_order_relaxed);
             if(inspection.styles>s_peak_target_styles.load(std::memory_order_relaxed))
@@ -242,6 +288,9 @@ void handle_serializer(void* serializer) {
                 s_owned_source_styles.store(captured.style_count,std::memory_order_release);
             }
         }
+        // Attempt full style-tree capture BEFORE any possible native writer.
+        // A type we cannot safely copy prevents complete capture.
+        maybe_capture_full_style_tree(read,object,path);
         const auto result=patch_loaded_ink_palette(
             read,write,object,path,s_palette,&s_journal);
         if(result.status==InkLoadPatchStatus::Applied) {
@@ -450,6 +499,12 @@ std::string native_resource_stage_status() {
            " last_matched_properties="+std::to_string(s_last_matched_properties.load())+
            " owned_original_colors="+std::to_string(s_owned_color_entries.load())+
            " source_styles="+std::to_string(s_owned_source_styles.load())+
+           " full_tree_capture="+style_capture_status_name(s_full_tree_status.load())+
+           " full_tree_attempts="+std::to_string(s_full_tree_attempts.load())+
+           " full_tree_styles="+std::to_string(s_full_tree_styles.load())+
+           " full_tree_colors="+std::to_string(s_full_tree_colors.load())+
+           " full_tree_inspected="+std::to_string(s_full_tree_observed_properties.load())+
+           " full_tree_unsupported="+std::to_string(s_full_tree_unsupported.load())+
            " target_resources="+std::to_string(s_targets.load())+
            " preflight_ready="+std::to_string(s_preflight_ready.load())+
            " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+

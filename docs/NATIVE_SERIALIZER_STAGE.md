@@ -175,6 +175,37 @@ Reference: RED4ext.SDK `ink/Style.hpp`,
 The SDK code serves as layout/ownership research; DreamUI does not
 require RED4ext at runtime.
 
+## Complete style-tree capture (HDRColor-only, read-only)
+
+The separate `InkOwnedStyleTree` attempts to capture **every** style and
+property in the authenticated main-colors resource at the serializer stage.
+It copies ordered `inkStyle` IDs and states, property hashes, and
+`HDRColor` values into ordinary C++ vectors owned by DreamUI. It rejects
+invalid bounds, invalid float channels, inlined/misaligned HDRColor Variant
+storage, unreadable type metadata, or more than 32 styles / 4096 total
+properties.
+
+**This attempt is all-or-nothing.** When a non-HDRColor Variant is
+present, it reports `unsupported_variant` and discards the complete
+tree instead of memcpy'ing a potentially ownership-bearing native
+Variant. If every property passes, the automatic load trace reports
+`full_tree_capture=captured`, with style/property counts. The existing
+three-color original-value snapshot is independent and still works if
+the complete tree cannot be captured.
+
+This is a **host-owned value representation**, not a native `DynArray`.
+Reconstructing `inkStyle` and `inkStyleProperty` for a refresh still
+requires authenticated engine allocator and RTTI copy/destruct operations
+in an owned resource/lifecycle context. The test branch does **not**
+invoke them or perform any native refresh.
+
+References: RED4ext.SDK `Containers/DynArray.hpp`,
+`NativeTypes-inl.hpp`, `ink/Style.hpp`, and
+`ink/StyleProperty.hpp`. HUD Painter's `HudPainterStorage.reds`
+uses script-side typed copying in `OnStyleLoaded` and typed resource
+assignment in `OnMainColorsReady`; raw C++ memory copying would not
+provide equivalent ownership.
+
 ## Why a live refresh needs an owning style snapshot
 
 A source-level review of **the owner's HUD Painter 1.4.1 ZIP** and
