@@ -46,9 +46,10 @@ called directly from an ASI without that stack.
 
 ## Read-only type verification now available in the cache inspector
 
-The mock-tested reader recognizes an inline `Variant` (tagged pointer to
-RTTI type), reads the `CClass` name/size/alignment metadata via a bounded
-read callback, and requires:
+The mock-tested reader recognizes a **non-inline** `Variant` (HDRColor
+requires 16-byte alignment but Variant's inline storage allows only 8),
+reads the `CClass` name/size/alignment metadata via a bounded read
+callback, and requires:
 
 - type name `HDRColor` (CName FNV1a64)
 - size `0x10`
