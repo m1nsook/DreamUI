@@ -61,3 +61,15 @@ a native Ink interface instead of an external DX12 overlay.
 
 The latest released game build remains alpha.8 until DreamUI actually
 has a working, reversible native color override.
+
+
+## Experimental native intent commands (source only)
+
+The guarded serializer-stage build also recognizes `ink-apply` and
+`ink-restore`. They are unavailable in the public alpha.8 and normal
+builds. They **queue** a change for a later game-owned serializer callback.
+`ink-restore` only succeeds when the same native resource generation is
+authenticated again; a command acknowledgement does **not** mean that
+the UI has been refreshed or the original color restored. Status exposes
+pending intent, snapshot count and restoration failure count. No
+developer command ever writes directly from the file watcher thread.

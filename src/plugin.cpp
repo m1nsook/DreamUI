@@ -152,6 +152,20 @@ DWORD WINAPI initialize(LPVOID context) {
                 phase = args.empty() ? "unspecified" : args.front();
                 if (ctx.request_refresh) *ctx.request_refresh = true;
             });
+        registry.add("ink-apply",
+            "request native preview on next main-colors resource load (experimental)",
+            [&](auto& ctx,auto) {
+                ctx.append(dreamui::native_resource_stage_request_apply()
+                    ? "queued Ink apply for a future resource load; not an immediate refresh"
+                    : "Ink apply unavailable: native stage disabled or journal active");
+            });
+        registry.add("ink-restore",
+            "restore only if SAME live resource enters serializer again (experimental)",
+            [&](auto& ctx,auto) {
+                ctx.append(dreamui::native_resource_stage_request_restore()
+                    ? "queued Ink restore for the same resource instance; not immediate"
+                    : "Ink restore unavailable: native stage disabled or no journal");
+            });
         registry.add("clear", "clear this session's developer command log",
             [&](auto& ctx,auto) {
                 if (console) {
@@ -185,7 +199,7 @@ DWORD WINAPI initialize(LPVOID context) {
 
         context.append("DreamUI developer commands ready. Create or edit "
                        "dreamui/dev/commands.txt after game launch; "
-                       "commands: help, version, themes, status, probe [phase], clear");
+                       "commands: help, version, themes, status, probe [phase], ink-apply, ink-restore, clear");
         bool was_down = modifier_down(VK_TAB);
         while (running.load(std::memory_order_relaxed)) {
             const auto batch = inbox.poll(inbox_path);

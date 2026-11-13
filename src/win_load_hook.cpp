@@ -34,6 +34,14 @@ std::atomic<std::uint32_t> s_rgb{0};
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
+std::atomic<std::uint32_t> s_restored{0};
+std::atomic<std::uint32_t> s_restore_failed{0};
+// 0 idle, 1 apply on next validated resource-load callback,
+// 2 restore ONLY if the exact same live instance re-enters the callback.
+std::atomic<int> s_intent{0};
+std::atomic_bool s_journal_active{false};
+// The atomic flag protects this entire journal during native callbacks.
+InkLoadJournal s_journal{};
 std::atomic_flag s_guard=ATOMIC_FLAG_INIT;
 std::uintptr_t s_image_base=0;
 std::uint32_t s_text_rva=0,s_text_size=0;
@@ -135,17 +143,53 @@ void handle_serializer(void* serializer) {
         // loaded theme resources. One primary palette first.
         if(path!=resource_path_hash(
             R"(base\gameplay\gui\common\main_colors.inkstyle)"))continue;
+        const auto intent=s_intent.load(std::memory_order_acquire);
+        if(intent==2) {
+            if(!s_journal.active()) {
+                s_intent.store(0,std::memory_order_release);
+                continue;
+            }
+            // Crucial: no stored pointer is ever dereferenced unless the
+            // game has presented that exact instance under a current strong
+            // serializer handle. Other generations are always ignored.
+            if(object!=s_journal.resource_address)continue;
+            const auto status=restore_loaded_ink_color(
+                read,write,object,s_journal);
+            if(status==InkLoadRestoreStatus::Restored) {
+                s_journal.clear();
+                s_journal_active.store(false,std::memory_order_release);
+                s_intent.store(0,std::memory_order_release);
+                ++s_restored;
+            } else if(status==InkLoadRestoreStatus::RollbackFailed ||
+                      status==InkLoadRestoreStatus::ChangedExternally ||
+                      status==InkLoadRestoreStatus::InvalidResource) {
+                ++s_restore_failed;
+                // Never blindly write again after identity/layout/rollback
+                // validation failed. Keep the original journal for review.
+                s_intent.store(0,std::memory_order_release);
+                s_enabled.store(false,std::memory_order_release);
+            } else if(status==InkLoadRestoreStatus::WriteFailed) {
+                ++s_restore_failed; // explicit retry still possible
+                s_intent.store(0,std::memory_order_release);
+            }
+            continue;
+        }
+        if(intent!=1 || s_journal.active())continue;
         const auto result=patch_loaded_ink_color(
-            read,write,object,path,"MainColors.Red",target);
-        if(result.status==InkLoadPatchStatus::Applied)++s_applied;
-        else if(result.status==InkLoadPatchStatus::RollbackFailed) {
+            read,write,object,path,"MainColors.Red",target,&s_journal);
+        if(result.status==InkLoadPatchStatus::Applied) {
+            ++s_applied;
+            s_journal_active.store(true,std::memory_order_release);
+            s_intent.store(0,std::memory_order_release);
+        } else if(result.status==InkLoadPatchStatus::RollbackFailed) {
             ++s_failed;
-            // Never continue mutating resource data after an unverified
-            // partial rollback; retain the original game load behavior.
+            s_intent.store(0,std::memory_order_release);
             s_enabled.store(false,std::memory_order_release);
         } else if(result.status==InkLoadPatchStatus::InvalidProperty ||
-                  result.status==InkLoadPatchStatus::WriteFailed)
+                  result.status==InkLoadPatchStatus::WriteFailed) {
             ++s_failed;
+            s_intent.store(0,std::memory_order_release);
+        }
     }
 }
 
@@ -248,6 +292,7 @@ bool start_native_resource_stage(
             return false;
         }
         s_installed.store(true,std::memory_order_release);
+        s_intent.store(1,std::memory_order_release);
         s_enabled.store(true,std::memory_order_release);
         log<<"Experimental standalone Ink serializer stage enabled. "
                "Writes only verified existing HDRColor payloads; no DX12 hooks.\n";
@@ -258,6 +303,32 @@ bool start_native_resource_stage(
     }
 #endif
 }
+bool native_resource_stage_request_apply() noexcept {
+#if !defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
+    return false;
+#else
+    if(!s_installed.load(std::memory_order_acquire) ||
+       !s_enabled.load(std::memory_order_acquire) ||
+       s_journal_active.load(std::memory_order_acquire))
+        return false;
+    s_intent.store(1,std::memory_order_release);
+    return true;
+#endif
+}
+
+bool native_resource_stage_request_restore() noexcept {
+#if !defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
+    return false;
+#else
+    if(!s_installed.load(std::memory_order_acquire) ||
+       !s_enabled.load(std::memory_order_acquire) ||
+       !s_journal_active.load(std::memory_order_acquire))
+        return false;
+    s_intent.store(2,std::memory_order_release);
+    return true;
+#endif
+}
+
 std::string native_resource_stage_status() {
 #if !defined(DREAMUI_EXPERIMENTAL_NATIVE_STAGE)
     return "native engine writes=not compiled";
@@ -268,7 +339,12 @@ std::string native_resource_stage_status() {
            (s_enabled.load(std::memory_order_relaxed)?"enabled":"disabled")+
            " candidates="+std::to_string(s_candidates.load())+
            " applied="+std::to_string(s_applied.load())+
-           " rejected="+std::to_string(s_failed.load());
+           " rejected="+std::to_string(s_failed.load())+
+           " journal="+(s_journal_active.load()?"active":"none")+
+           " restored="+std::to_string(s_restored.load())+
+           " restore_failures="+std::to_string(s_restore_failed.load())+
+           " request="+std::to_string(s_intent.load())+
+           " (commands deferred until resource lifecycle)";
 #endif
 }
 } // namespace dreamui
