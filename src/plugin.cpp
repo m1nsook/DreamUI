@@ -4,9 +4,13 @@
 #include "dreamui/theme.hpp"
 #include "dreamui/control_hub.hpp"
 #include "dreamui/win_probe.hpp"
+#include "dreamui/dev/command_registry.hpp"
+#include "dreamui/dev/command_inbox.hpp"
 #include <atomic>
 #include <exception>
 #include <filesystem>
+#include <cstdint>
+#include <span>
 #include <fstream>
 #include <string>
 #include <string_view>
@@ -77,8 +81,8 @@ DWORD WINAPI initialize(LPVOID context) {
         log << "Themes available=" << accepted
             << " active=" << (hub.has_themes ? hub.active_name : "(none)")
             << "\n";
-        log << "Diagnostics: press plain TAB with Cyberpunk focused. "
-               "No timed scans, no input interception. Results: DreamUI-probe.log\n";
+        log << "Diagnostics: plain TAB or developer command file; "
+               "no automatic scans, no DX12 hooks, no game patches.\n";
         log.flush();
 
         // Fresh diagnostic log for every launch, not an enormous append-only
@@ -88,21 +92,106 @@ DWORD WINAPI initialize(LPVOID context) {
             log << "Unable to open DreamUI-probe.log; hotkey unavailable\n";
             return 0;
         }
+        // The developer-contributed command registry is independent of
+        // ImGui, MinHook and DX12. The command inbox is only an optional
+        // local text file; no game-input hook or rendering changes exist.
+        fs::create_directories(home / L"dev");
+        std::ofstream console(home / L"logs" / L"DreamUI-dev.log", std::ios::trunc);
+        dreamui::dev::CommandInbox inbox;
+        const auto inbox_path = home / L"dev" / L"commands.txt";
+        inbox.poll(inbox_path); // never run an old command from prior sessions
+        dreamui::dev::CommandRegistry registry;
+        std::string phase = "unspecified";
+        bool requested = false;
+        std::uint64_t requests = 0;
+
+        dreamui::dev::CommandContext context;
+        context.request_refresh = &requested;
+        context.append = [&](std::string line) {
+            if (console) {
+                console << line << '\n';
+                console.flush();
+            }
+        };
+        registry.add("help", "list available DreamUI commands",
+            [&](auto& ctx,auto){ctx.append(registry.help_text());});
+        registry.add("version", "show DreamUI native ASI version",
+            [&](auto& ctx,auto) {
+                ctx.append("DreamUI " + std::string(dreamui::kDreamUIVersion));
+            });
+        registry.add("themes", "show validated .dream themes",
+            [&](auto& ctx,auto) {
+                if (hub.installed.empty()) {
+                    ctx.append("no validated .dream themes");
+                } else {
+                    for (const auto& item : hub.installed)
+                        ctx.append(item.name + " (" + item.id + ") v" + item.version);
+                }
+            });
+        registry.add("status", "show session state; this is not a game-screen detector",
+            [&](auto& ctx,auto) {
+                ctx.append("diagnostic requests=" + std::to_string(requests) +
+                           " | last phase label=" + phase +
+                           " | verified themes=" + std::to_string(accepted) +
+                           " | engine changes=disabled");
+            });
+        registry.add("probe", "probe [phase-label] - read-only Ink graph snapshot",
+            [&](auto& ctx,std::span<const std::string> args) {
+                if (args.size()>1 || (!args.empty() && args.front().size()>48)) {
+                    ctx.append("usage: probe [single-phase-label]");
+                    return;
+                }
+                phase = args.empty() ? "unspecified" : args.front();
+                if (ctx.request_refresh) *ctx.request_refresh = true;
+            });
+        registry.add("clear", "clear this session's developer command log",
+            [&](auto& ctx,auto) {
+                if (console) {
+                    console.close();
+                    console.open(home / L"logs" / L"DreamUI-dev.log",std::ios::trunc);
+                }
+                ctx.append("developer command log cleared");
+            });
+
+        auto run_probe = [&](std::string_view source) {
+            ++requests;
+            probe << "=== DreamUI " << dreamui::kDreamUIVersion
+                  << " | " << source << " probe #" << requests
+                  << " | phase label=" << phase << " (user supplied, not engine-verified)"
+                  << " ===\n";
+            dreamui::log_executable_probe(fs::path(exe), probe);
+            probe << "=== probe #" << requests << " complete ===\n";
+            probe.flush();
+            context.append("probe #" + std::to_string(requests) +
+                           " complete; phase label=" + phase +
+                           "; results in DreamUI-probe.log");
+        };
+        auto dispatch = [&](std::string_view command) {
+            requested = false;
+            std::string outcome;
+            const auto ok = registry.dispatch(context,command,outcome);
+            context.append("> " + std::string(command) + " => " +
+                           (ok ? "" : "! ") + outcome);
+            if (requested)run_probe("COMMAND");
+        };
+
+        context.append("DreamUI developer commands ready. Create or edit "
+                       "dreamui/dev/commands.txt after game launch; "
+                       "commands: help, version, themes, status, probe [phase], clear");
         bool was_down = modifier_down(VK_TAB);
-        unsigned requests = 0;
         while (running.load(std::memory_order_relaxed)) {
+            const auto batch = inbox.poll(inbox_path);
+            if (batch.ready) {
+                if (!batch.error.empty())context.append("inbox error: "+batch.error);
+                for (const auto& cmd : batch.lines)dispatch(cmd);
+            }
             bool down = modifier_down(VK_TAB);
-            // Do not treat Alt+Tab or Shift+Tab (Steam overlay) as a request.
-            // Nothing is hooked or consumed: Cyberpunk still gets normal Tab.
+            // Tab is NOT swallowed; neither Alt+Tab nor Shift+Tab runs probes.
             if (down && !was_down && is_game_foreground() &&
                 !modifier_down(VK_MENU) && !modifier_down(VK_SHIFT) &&
                 !modifier_down(VK_LWIN) && !modifier_down(VK_RWIN)) {
-                ++requests;
-                probe << "=== DreamUI " << dreamui::kDreamUIVersion
-                      << " | TAB probe #" << requests << " ===\n";
-                dreamui::log_executable_probe(fs::path(exe), probe);
-                probe << "=== probe #" << requests << " complete ===\n";
-                probe.flush();
+                phase = "hotkey";
+                run_probe("TAB");
                 down = modifier_down(VK_TAB);
             }
             was_down = down;
