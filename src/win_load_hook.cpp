@@ -337,7 +337,7 @@ bool start_native_resource_stage(
                    "Up to 3 palette properties may change at load; no UI refresh.\n";
         else
             log<<"Experimental native Ink read-only preflight enabled. "
-                   "No native memory writes; use status for counters.\n";
+                   "No native Ink color writes (hook installation still patches code); use status.\n";
         return true;
     }catch(...){
         log<<"Native Ink preview disabled after initialization exception\n";
