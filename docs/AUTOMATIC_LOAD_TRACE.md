@@ -54,6 +54,9 @@ in-game dev window.
 - `last_target_styles` and `peak_target_styles`: direct style counts
   read during read-only preflight. Peak is the greatest count seen
   during this session, not the full resource history.
+- `owned_original_colors` and `source_styles`: number of validated
+  HDRColor values and source styles retained as pointer-free data on the
+  first successful preflight; not an owning resource or full style clone.
 - `last_matched_properties`: validated matching HDRColor properties
   from the most recent target preflight.
 - `preflight_ready`, `preflight_no_styles`, `preflight_missing`, and

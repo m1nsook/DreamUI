@@ -146,6 +146,35 @@ memory. The full preimage is retained in an optional generation-bound
 journal for a later authenticated restore. Each native color's peak
 brightness and alpha are preserved.
 
+## Pointer-free first-load HDRColor snapshot
+
+After the observed clean-game serializer preflight confirmed ten direct
+styles and three matching HDRColor targets, DreamUI now retains a
+**plugin-owned, bounded copy of the validated color payloads**. The
+`InkOwnedColorPreimage` contains each matched property hash, style
+identity/state, style/property indices, original four-channel HDRColor,
+and proposed four-channel preview, plus the resource path and instance ID.
+It deliberately contains **no raw engine allocation pointer**; the
+preflight clears its output completely on failure. The native observation
+hook captures the first eligible preimage before the game continues
+post-load processing, and status exposes `owned_original_colors` and
+`source_styles`. The write-mode path captures before any native color
+transaction.
+
+This is **not the same as HUD Painter's engine-owned deep copy of
+`array<inkStyle>`**. Each `inkStyle` has a nested property array and
+each `Variant` may own an external allocation; memcpy, borrowed
+DynArray headers, or copied property pointers would be unsafe.
+DreamUI's value-only capture cannot repopulate `resource.styles` after
+post-load consumption, call `RefreshResource()`, or guarantee live
+restoration. These remain independent implementation milestones.
+
+Reference: RED4ext.SDK `ink/Style.hpp`,
+`ink/StyleProperty.hpp`, `ink/StyleResource.hpp`,
+`NativeTypes-inl.hpp` and `Containers/DynArray.hpp`.
+The SDK code serves as layout/ownership research; DreamUI does not
+require RED4ext at runtime.
+
 ## Why a live refresh needs an owning style snapshot
 
 A source-level review of **the owner's HUD Painter 1.4.1 ZIP** and

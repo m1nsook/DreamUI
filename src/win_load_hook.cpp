@@ -37,6 +37,11 @@ std::array<InkPaletteEntry,3> s_palette{{
     {"MainColors.ActiveYellow",{}}
 }};
 std::mutex s_palette_lock;
+// Value-only first-load capture. Do not store engine allocation addresses.
+// The serializer callback and theme selector use the same palette lock.
+InkOwnedColorPreimage s_first_color_preimage{};
+std::atomic<std::uint32_t> s_owned_color_entries{0};
+std::atomic<std::uint32_t> s_owned_source_styles{0};
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
@@ -168,8 +173,14 @@ void handle_serializer(void* serializer) {
             // strong handle, but observation must never write native memory.
             std::unique_lock palette_guard(s_palette_lock,std::try_to_lock);
             if(!palette_guard.owns_lock())continue;
+            InkOwnedColorPreimage captured{};
             const auto inspection=inspect_loaded_ink_palette(
-                read,object,path,s_palette);
+                read,object,path,s_palette,&captured);
+            if(captured.valid() && !s_first_color_preimage.valid()) {
+                s_first_color_preimage=captured;
+                s_owned_color_entries.store(captured.entry_count,std::memory_order_release);
+                s_owned_source_styles.store(captured.style_count,std::memory_order_release);
+            }
             s_last_target_styles.store(inspection.styles,std::memory_order_relaxed);
             s_last_matched_properties.store(inspection.matched,std::memory_order_relaxed);
             if(inspection.styles>s_peak_target_styles.load(std::memory_order_relaxed))
@@ -215,10 +226,22 @@ void handle_serializer(void* serializer) {
         }
         if(intent!=1 || s_journal.active())continue;
         // Keep the palette lock through the transaction AND journal state
-        // update. Otherwise a console theme switch could race after the
-        // snapshot but before the game callback marks the journal active.
+        // update. Otherwise a theme change could race after the snapshot
+        // but before the game callback marks the journal active.
         std::unique_lock palette_guard(s_palette_lock,std::try_to_lock);
         if(!palette_guard.owns_lock())continue;
+        // Capture vanilla HDRColor values before any native writer runs.
+        // This is a VALUE snapshot only, not an owning inkStyle array.
+        if(!s_first_color_preimage.valid()) {
+            InkOwnedColorPreimage captured{};
+            const auto inspected=inspect_loaded_ink_palette(
+                read,object,path,s_palette,&captured);
+            if(inspected.eligible && captured.valid()) {
+                s_first_color_preimage=captured;
+                s_owned_color_entries.store(captured.entry_count,std::memory_order_release);
+                s_owned_source_styles.store(captured.style_count,std::memory_order_release);
+            }
+        }
         const auto result=patch_loaded_ink_palette(
             read,write,object,path,s_palette,&s_journal);
         if(result.status==InkLoadPatchStatus::Applied) {
@@ -425,6 +448,8 @@ std::string native_resource_stage_status() {
            " last_target_styles="+std::to_string(s_last_target_styles.load())+
            " peak_target_styles="+std::to_string(s_peak_target_styles.load())+
            " last_matched_properties="+std::to_string(s_last_matched_properties.load())+
+           " owned_original_colors="+std::to_string(s_owned_color_entries.load())+
+           " source_styles="+std::to_string(s_owned_source_styles.load())+
            " target_resources="+std::to_string(s_targets.load())+
            " preflight_ready="+std::to_string(s_preflight_ready.load())+
            " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+
