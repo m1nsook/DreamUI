@@ -48,6 +48,10 @@ int main(){
     mem.put(object,0x40,styles);
     mem.put(object,0x48,2u);
     mem.put(object,0x4c,2u);
+    mem.put(styles,0,cname_hash("MainColors"));
+    mem.put(styles,8,cname_hash("Default"));
+    mem.put(styles,0x20,cname_hash("OtherColors"));
+    mem.put(styles,0x28,cname_hash("Active"));
     mem.put(styles,0x10,props1);
     mem.put(styles,0x18,2u);
     mem.put(styles,0x1c,2u);
@@ -83,16 +87,32 @@ int main(){
     }};
     // A complete read-only inspection must agree with the patcher's
     // validation, without ever calling the memory writer.
-    auto inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    InkOwnedColorPreimage owned{};
+    auto inspected=inspect_loaded_ink_palette(rd,object,path,palette,&owned);
     CHECK(inspected.eligible && inspected.matched==3 && inspected.styles==2);
+    CHECK(owned.valid() && owned.entry_count==3 && owned.style_count==2);
+    CHECK(owned.resource_path_hash==path && owned.resource_instance_id==0xAA55);
+    CHECK(owned.entries[0].style_id==cname_hash("MainColors"));
+    CHECK(owned.entries[0].style_state==cname_hash("Default"));
+    CHECK(owned.entries[0].property_hash==cname_hash("MainColors.Red"));
+    CHECK(owned.entries[0].original==red);
+    CHECK(owned.entries[1].original==panel && owned.entries[2].original==yellow);
+    CHECK(owned.entries[2].style_id==cname_hash("OtherColors"));
+    CHECK(owned.entries[2].style_state==cname_hash("Active"));
+    CHECK(owned.entries[0].proposed!=owned.entries[0].original);
     CHECK(mem.writes==0);
+    // Keep an independent value copy. It must survive native styles being
+    // consumed, even though it cannot reconstruct the full inkStyle array.
+    const auto retained=owned;
     mem.put(object,0x28,std::uint64_t(0));
-    inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    inspected=inspect_loaded_ink_palette(rd,object,path,palette,&owned);
     CHECK(!inspected.eligible && inspected.failure==InkLoadPatchStatus::InvalidResource);
+    CHECK(!owned.valid() && retained.valid());
     mem.put(object,0x28,std::uint64_t(0xAA55));
     mem.put(object,0x4c,0u);
-    inspected=inspect_loaded_ink_palette(rd,object,path,palette);
+    inspected=inspect_loaded_ink_palette(rd,object,path,palette,&owned);
     CHECK(!inspected.eligible && inspected.failure==InkLoadPatchStatus::NoStyles);
+    CHECK(!owned.valid() && retained.entries[0].original==red);
     mem.put(object,0x4c,2u);
     CHECK(mem.writes==0);
 
@@ -148,5 +168,13 @@ int main(){
     CHECK(rd(clr2,&b,sizeof(b)) && b==panel);
     CHECK(rd(clr3,&c,sizeof(c)) && c==yellow);
     mem.fail_on=0;
-    std::cout<<"Native three-color palette is atomic and reversible\n";
+    // No retained pointer, array header, or RTTI address is needed after
+    // dropping all fake engine memory. Snapshot values stay usable.
+    mem.blocks.clear();
+    CHECK(retained.valid() && retained.entries[0].original==red);
+    CHECK(retained.entries[1].original==panel &&
+          retained.entries[2].original==yellow);
+    CHECK(retained.entries[0].style_index==0 &&
+          retained.entries[2].style_index==1);
+    std::cout<<"Native palette preimage is owned, pointer-free, and transaction-safe\n";
 }
