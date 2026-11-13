@@ -255,8 +255,13 @@ now implements the game-specific ABI through its own symbol resolver.
 In the normal preview path it remains entirely dormant. With
 `native-ink-clone.enable` separately present, it performs at most
 one cloned-resource roundtrip on the authenticated serializer callback,
-checks clone RTTI, exact resource path, strong Handle and independently
-allocated nonempty styles, then releases the clone immediately.
+requires a source style tree containing **only fully verified HDRColor
+Variants**, checks the clone's RTTI and resource path, and verifies that
+all four resource array buffers, nested style-property arrays, and
+external HDRColor payloads are independently allocated before releasing
+the temporary clone. The engine's typed Clone operation remains responsible
+for reference counting any intentionally shared `Ref<inkStyleResource>`
+objects in themes, overrides and style imports.
 
 The game-owned `Handle_DecWeakRef` function is resolved by SDK hash
 `0x333B1404` from the timestamp-matched linker database. The release
