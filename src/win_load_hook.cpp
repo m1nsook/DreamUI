@@ -4,6 +4,7 @@
 #include "dreamui/ink_load_patch.hpp"
 #include "dreamui/ink_style_snapshot.hpp"
 #include "dreamui/native_ink_clone.hpp"
+#include "dreamui/win_clone_probe.hpp"
 #include "dreamui/address_db.hpp"
 #include "dreamui/pe_probe.hpp"
 #include <algorithm>
@@ -26,6 +27,8 @@ namespace {
 constexpr std::uint32_t kBuildTimestamp=1792368047u;
 constexpr std::uint32_t kImageSize=92385280u;
 constexpr std::uint32_t kSchedulePostLoadHash=3599579551u;
+// RED4ext.SDK Handle_DecWeakRef, used only for releasing a game-owned clone.
+constexpr std::uint32_t kHandleDecWeakHash=0x333B1404u;
 // Symbol & callback layout verified against the published Codeware native
 // source. Game build fingerprint and runtime memory guards are mandatory.
 using StageFn=void (__fastcall *)(std::uint64_t,std::uint8_t,std::uint64_t,
@@ -55,6 +58,12 @@ std::atomic<std::uint32_t> s_full_tree_colors{0};
 // Symbol lookup alone never authorizes a native clone call or lifetime
 // extension; proper game-engine Handle release is still unwired.
 std::atomic_bool s_clone_symbol_resolved{false};
+std::atomic_bool s_clone_release_symbol_resolved{false};
+std::atomic_bool s_clone_requested{false};
+std::atomic_bool s_clone_attempted{false};
+std::atomic<int> s_clone_outcome{static_cast<int>(WinInkCloneProbeStatus::NotAttempted)};
+std::atomic<std::uint32_t> s_clone_observed_styles{0};
+WinInkCloneProbeConfig s_clone_cfg{};
 std::atomic<std::uint32_t> s_owned_color_entries{0};
 std::atomic<std::uint32_t> s_owned_source_styles{0};
 std::atomic<std::uint32_t> s_applied{0};
@@ -150,6 +159,17 @@ bool verified_style_type(std::uint64_t object) {
     return safe_read(reinterpret_cast<std::uintptr_t>(type),meta.data(),meta.size()) &&
            u64(meta.data(),0x18)==cname_hash("inkStyleResource");
 }
+const char* clone_probe_status_name(int status) noexcept {
+    switch(static_cast<WinInkCloneProbeStatus>(status)) {
+        case WinInkCloneProbeStatus::NotAttempted: return "not_attempted";
+        case WinInkCloneProbeStatus::RejectedSource: return "rejected_source";
+        case WinInkCloneProbeStatus::CloneFailed: return "clone_failed";
+        case WinInkCloneProbeStatus::VerificationFailed: return "verification_failed";
+        case WinInkCloneProbeStatus::Released: return "verified_and_released";
+        case WinInkCloneProbeStatus::ReleaseFailed: return "release_failed";
+    }
+    return "unknown";
+}
 const char* style_capture_status_name(int status) noexcept {
     switch(static_cast<InkStyleCaptureStatus>(status)) {
         case InkStyleCaptureStatus::Captured: return "captured";
@@ -235,7 +255,30 @@ void handle_serializer(void* serializer) {
             s_last_matched_properties.store(inspection.matched,std::memory_order_relaxed);
             if(inspection.styles>s_peak_target_styles.load(std::memory_order_relaxed))
                 s_peak_target_styles.store(inspection.styles,std::memory_order_relaxed);
-            if(inspection.eligible)++s_preflight_ready;
+            if(inspection.eligible) {
+                ++s_preflight_ready;
+                // An additional explicit marker authorizes exactly ONE
+                // native clone, released in this same engine callback.
+                // Never invoked by the Tab diagnostic worker.
+                if(s_clone_requested.load(std::memory_order_acquire) &&
+                   !s_clone_attempted.exchange(true,std::memory_order_acq_rel)) {
+                    std::uint64_t resource_id=0;
+                    if(safe_read(object+0x28,&resource_id,sizeof(resource_id)) &&
+                       resource_id) {
+                        const auto probe=probe_native_ink_clone(
+                            InkBorrowedHandle{object,refs},
+                            InkCloneIdentity{path,resource_id},s_clone_cfg);
+                        s_clone_observed_styles.store(probe.cloned_styles,
+                                                       std::memory_order_release);
+                        s_clone_outcome.store(static_cast<int>(probe.status),
+                                              std::memory_order_release);
+                    } else {
+                        s_clone_outcome.store(static_cast<int>(
+                            WinInkCloneProbeStatus::RejectedSource),
+                            std::memory_order_release);
+                    }
+                }
+            }
             else if(inspection.failure==InkLoadPatchStatus::NoStyles)
                 ++s_preflight_no_styles;
             else if(inspection.failure==InkLoadPatchStatus::NoMatchingProperty)
@@ -336,9 +379,11 @@ void __fastcall schedule_hook(std::uint64_t a,std::uint8_t b,std::uint64_t c,
 bool get_target_address(const std::filesystem::path& game_exe,
                         std::uint32_t& rva,
                         std::uint32_t& optional_clone_rva,
+                        std::uint32_t& optional_weak_rva,
                         AddressSections& sections,
                         std::string& error) {
     optional_clone_rva=0;
+    optional_weak_rva=0;
     std::ifstream input(game_exe,std::ios::binary|std::ios::ate);
     if(!input){error="executable unavailable";return false;}
     const auto length=input.tellg();
@@ -354,8 +399,8 @@ bool get_target_address(const std::filesystem::path& game_exe,
     }
     // Codeware's independently published ISerializable::Clone address
     // hash is optional; the existing validated hook remains required.
-    const std::array<std::uint32_t,2> wanted{
-        kSchedulePostLoadHash,kNativeISerializableCloneHash};
+    const std::array<std::uint32_t,3> wanted{
+        kSchedulePostLoadHash,kNativeISerializableCloneHash,kHandleDecWeakHash};
     const auto db=read_address_database(
         game_exe.parent_path()/L"cyberpunk2077_addresses.json",
         pe.coff_timestamp,pe.sections,wanted);
@@ -371,6 +416,12 @@ bool get_target_address(const std::filesystem::path& game_exe,
        clone->second.rva-pe.sections.text_rva<pe.sections.text_size &&
        clone->second.rva!=it->second.rva)
         optional_clone_rva=clone->second.rva;
+    const auto weak=db.matches.find(kHandleDecWeakHash);
+    if(weak!=db.matches.end() && weak->second.segment==1 &&
+       weak->second.rva>=pe.sections.text_rva &&
+       weak->second.rva-pe.sections.text_rva<pe.sections.text_size &&
+       weak->second.rva!=it->second.rva)
+        optional_weak_rva=weak->second.rva;
     sections=pe.sections;
     rva=it->second.rva;
     return true;
@@ -395,10 +446,10 @@ bool start_native_resource_stage(
             log<<"Native Ink preview missing color tokens or journal active\n";
             return false;
         }
-        std::uint32_t rva=0,clone_rva=0;
+        std::uint32_t rva=0,clone_rva=0,weak_rva=0;
         AddressSections sections{};
         std::string error;
-        if(!get_target_address(game_exe,rva,clone_rva,sections,error)){
+        if(!get_target_address(game_exe,rva,clone_rva,weak_rva,sections,error)){
             log<<"Native Ink preview disabled: "<<error<<"\n";return false;
         }
         s_image_base=reinterpret_cast<std::uintptr_t>(GetModuleHandleW(nullptr));
@@ -408,6 +459,14 @@ bool start_native_resource_stage(
             s_clone_symbol_resolved.store(
                 executable_address(s_image_base+clone_rva),
                 std::memory_order_release);
+        if(s_image_base && weak_rva)
+            s_clone_release_symbol_resolved.store(
+                executable_address(s_image_base+weak_rva),
+                std::memory_order_release);
+        s_clone_cfg={
+            s_image_base+clone_rva,s_image_base+weak_rva,
+            s_image_base+s_text_rva,s_image_base+s_text_rva+s_text_size
+        };
         if(!s_image_base ||
            rva>=sections.image_size ||
            !executable_address(s_image_base+rva)){
@@ -426,11 +485,17 @@ bool start_native_resource_stage(
             log<<"Native Ink preview disabled: guarded hook install failed\n";
             return false;
         }
-        // Opening the experimental serializer hook enables read-only checks
-        // only. The separate write marker must be present at game startup.
-        // Runtime file edits cannot silently promote a running observer.
+        // Determine marker permissions once. The clone marker is
+        // independent: it allocates and releases a temporary engine object,
+        // and is explicitly disallowed when native writes are enabled.
         const bool write_mode=std::filesystem::is_regular_file(
             home/L"dev"/L"native-ink-write.enable");
+        const bool clone_mode=!write_mode &&
+            std::filesystem::is_regular_file(
+                home/L"dev"/L"native-ink-clone.enable") &&
+            s_clone_symbol_resolved.load(std::memory_order_acquire) &&
+            s_clone_release_symbol_resolved.load(std::memory_order_acquire);
+        s_clone_requested.store(clone_mode,std::memory_order_release);
         s_write_mode.store(write_mode,std::memory_order_release);
         s_installed.store(true,std::memory_order_release);
         s_intent.store(write_mode?1:0,std::memory_order_release);
@@ -438,6 +503,10 @@ bool start_native_resource_stage(
         if(write_mode)
             log<<"Experimental native Ink write mode explicitly enabled. "
                    "Up to 3 palette properties may change at load; no UI refresh.\n";
+        else if(clone_mode)
+            log<<"Experimental one-shot native Ink clone-and-release armed. "
+                   "No palette writes; Clone allocates engine memory, "
+                   "so this is NOT a read-only preflight.\n";
         else
             log<<"Experimental native Ink read-only preflight enabled. "
                    "No native Ink color writes (hook installation still patches code); automatic trace is DreamUI-load.log.\n";
@@ -510,7 +579,8 @@ std::string native_resource_stage_status() {
         return "native stage=inactive";
     return std::string("native stage=")+
            (s_enabled.load(std::memory_order_relaxed)?"enabled":"disabled")+
-           (s_write_mode.load(std::memory_order_relaxed)?" mode=write":" mode=observe-only")+
+           (s_write_mode.load(std::memory_order_relaxed)?" mode=write":
+            s_clone_requested.load(std::memory_order_relaxed)?" mode=clone-test":" mode=observe-only")+
            " serializer_callbacks="+std::to_string(s_serializer_callbacks.load())+
            " candidates="+std::to_string(s_candidates.load())+
            " last_target_styles="+std::to_string(s_last_target_styles.load())+
@@ -525,7 +595,10 @@ std::string native_resource_stage_status() {
            " full_tree_inspected="+std::to_string(s_full_tree_observed_properties.load())+
            " full_tree_unsupported="+std::to_string(s_full_tree_unsupported.load())+
            " clone_symbol="+(s_clone_symbol_resolved.load()?"resolved":"unavailable")+
-           " clone_owner_backend=not_wired"+
+           " clone_release_symbol="+(s_clone_release_symbol_resolved.load()?"resolved":"unavailable")+
+           " clone_probe="+clone_probe_status_name(s_clone_outcome.load())+
+           " clone_attempted="+std::to_string(s_clone_attempted.load()?1:0)+
+           " clone_styles="+std::to_string(s_clone_observed_styles.load())+
            " target_resources="+std::to_string(s_targets.load())+
            " preflight_ready="+std::to_string(s_preflight_ready.load())+
            " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+
