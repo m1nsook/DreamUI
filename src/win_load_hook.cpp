@@ -40,6 +40,16 @@ std::mutex s_palette_lock;
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
+// Read-only telemetry for the authenticated main-colors resource. All
+// counters are safe to sample from the developer worker without locking.
+std::atomic<std::uint32_t> s_targets{0};
+std::atomic<std::uint32_t> s_preflight_ready{0};
+std::atomic<std::uint32_t> s_preflight_no_styles{0};
+std::atomic<std::uint32_t> s_preflight_missing{0};
+std::atomic<std::uint32_t> s_preflight_rejected{0};
+// An experimental hook does not imply permission to mutate native Ink.
+// A second explicit marker is required before any write intent is allowed.
+std::atomic_bool s_write_mode{false};
 std::atomic<std::uint32_t> s_restored{0};
 std::atomic<std::uint32_t> s_restore_failed{0};
 // 0 idle, 1 apply on next validated resource-load callback,
@@ -145,6 +155,22 @@ void handle_serializer(void* serializer) {
         // loaded theme resources. One primary palette first.
         if(path!=resource_path_hash(
             R"(base\gameplay\gui\common\main_colors.inkstyle)"))continue;
+        ++s_targets;
+        if(!s_write_mode.load(std::memory_order_acquire)) {
+            // The hook is in the game's serializer callback, with a verified
+            // strong handle, but observation must never write native memory.
+            std::unique_lock palette_guard(s_palette_lock,std::try_to_lock);
+            if(!palette_guard.owns_lock())continue;
+            const auto inspection=inspect_loaded_ink_palette(
+                read,object,path,s_palette);
+            if(inspection.eligible)++s_preflight_ready;
+            else if(inspection.failure==InkLoadPatchStatus::NoStyles)
+                ++s_preflight_no_styles;
+            else if(inspection.failure==InkLoadPatchStatus::NoMatchingProperty)
+                ++s_preflight_missing;
+            else ++s_preflight_rejected;
+            continue;
+        }
         const auto intent=s_intent.load(std::memory_order_acquire);
         if(intent==2) {
             if(!s_journal.active()) {
@@ -297,11 +323,21 @@ bool start_native_resource_stage(
             log<<"Native Ink preview disabled: guarded hook install failed\n";
             return false;
         }
+        // Opening the experimental serializer hook enables read-only checks
+        // only. The separate write marker must be present at game startup.
+        // Runtime file edits cannot silently promote a running observer.
+        const bool write_mode=std::filesystem::is_regular_file(
+            home/L"dev"/L"native-ink-write.enable");
+        s_write_mode.store(write_mode,std::memory_order_release);
         s_installed.store(true,std::memory_order_release);
-        s_intent.store(1,std::memory_order_release);
+        s_intent.store(write_mode?1:0,std::memory_order_release);
         s_enabled.store(true,std::memory_order_release);
-        log<<"Experimental standalone Ink serializer stage enabled. "
-               "Writes up to 3 verified native palette properties; no DX12 hooks.\n";
+        if(write_mode)
+            log<<"Experimental native Ink write mode explicitly enabled. "
+                   "Up to 3 palette properties may change at load; no UI refresh.\n";
+        else
+            log<<"Experimental native Ink read-only preflight enabled. "
+                   "No native memory writes; use status for counters.\n";
         return true;
     }catch(...){
         log<<"Native Ink preview disabled after initialization exception\n";
@@ -341,6 +377,7 @@ bool native_resource_stage_request_apply() noexcept {
 #else
     if(!s_installed.load(std::memory_order_acquire) ||
        !s_enabled.load(std::memory_order_acquire) ||
+       !s_write_mode.load(std::memory_order_acquire) ||
        s_journal_active.load(std::memory_order_acquire))
         return false;
     s_intent.store(1,std::memory_order_release);
@@ -354,6 +391,7 @@ bool native_resource_stage_request_restore() noexcept {
 #else
     if(!s_installed.load(std::memory_order_acquire) ||
        !s_enabled.load(std::memory_order_acquire) ||
+       !s_write_mode.load(std::memory_order_acquire) ||
        !s_journal_active.load(std::memory_order_acquire))
         return false;
     s_intent.store(2,std::memory_order_release);
@@ -369,7 +407,13 @@ std::string native_resource_stage_status() {
         return "native stage=inactive";
     return std::string("native stage=")+
            (s_enabled.load(std::memory_order_relaxed)?"enabled":"disabled")+
+           (s_write_mode.load(std::memory_order_relaxed)?" mode=write":" mode=observe-only")+
            " candidates="+std::to_string(s_candidates.load())+
+           " target_resources="+std::to_string(s_targets.load())+
+           " preflight_ready="+std::to_string(s_preflight_ready.load())+
+           " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+
+           " preflight_missing="+std::to_string(s_preflight_missing.load())+
+           " preflight_rejected="+std::to_string(s_preflight_rejected.load())+
            " applied="+std::to_string(s_applied.load())+
            " rejected="+std::to_string(s_failed.load())+
            " journal="+(s_journal_active.load()?"active":"none")+
