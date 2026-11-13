@@ -197,7 +197,11 @@ public:
         return true;
     }
     void release_owned(InkOwnedNativeHandle& out) noexcept override {
-        if(!release_native_handle(out,cfg_))
+        // If the engine unexpectedly returned an alias, we cannot assume
+        // that Clone incremented a new strong reference. Never decrement
+        // the original resource's serializer-owned refcount on a guess.
+        if(out.instance==source_.instance || out.ref_count==source_.ref_count ||
+           !release_native_handle(out,cfg_))
             release_failed_=true;
     }
     bool release_failed() const noexcept {return release_failed_;}
