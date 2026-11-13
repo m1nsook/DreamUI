@@ -97,6 +97,22 @@ DWORD WINAPI initialize(LPVOID context) {
             << dreamui::native_resource_stage_status() << "\n";
         log.flush();
 
+        // Native load-stage telemetry is automatic and independent of both
+        // the Tab diagnostic and the optional text-file command inbox.
+        // The worker samples atomic counters only: no game pointers are
+        // dereferenced and no engine functions are called by this logger.
+        std::ofstream load_trace(home / L"logs" / L"DreamUI-load.log",std::ios::trunc);
+        std::string last_native_status = dreamui::native_resource_stage_status();
+        if(load_trace) {
+            load_trace << "DreamUI " << dreamui::kDreamUIVersion
+                       << " | automatic native resource-load trace\n";
+            load_trace << last_native_status << '\n';
+            load_trace.flush();
+        }
+        const std::uint64_t native_trace_start = GetTickCount64();
+        std::uint64_t next_native_sample = native_trace_start + 1000;
+        unsigned native_trace_updates = 0;
+
         // Fresh diagnostic log for every launch, not an enormous append-only
         // history of previous alpha test runs.
         std::ofstream probe(home / L"logs" / L"DreamUI-probe.log", std::ios::trunc);
@@ -250,6 +266,26 @@ DWORD WINAPI initialize(LPVOID context) {
                 down = modifier_down(VK_TAB);
             }
             was_down = down;
+            // Log changed native load counters once per second without
+            // any manual command or hotkey. Keep the file bounded for long
+            // game sessions; the public build has no native hook to sample.
+            const auto now = GetTickCount64();
+            if(now >= next_native_sample) {
+                next_native_sample = now + 1000;
+                const auto status = dreamui::native_resource_stage_status();
+                if(status != last_native_status) {
+                    last_native_status = status;
+                    if(load_trace && native_trace_updates < 1024) {
+                        load_trace << "uptime_ms=" << (now - native_trace_start)
+                                   << " | " << status << '\n';
+                        load_trace.flush();
+                    } else if(load_trace && native_trace_updates == 1024) {
+                        load_trace << "trace update limit reached; stopping event samples\n";
+                        load_trace.flush();
+                    }
+                    ++native_trace_updates;
+                }
+            }
             Sleep(30);
         }
         log << "DreamUI diagnostic input stopped\n";

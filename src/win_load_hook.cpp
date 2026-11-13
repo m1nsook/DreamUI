@@ -40,9 +40,16 @@ std::mutex s_palette_lock;
 std::atomic<std::uint32_t> s_applied{0};
 std::atomic<std::uint32_t> s_failed{0};
 std::atomic<std::uint32_t> s_candidates{0};
+// Counts real serializer callback entries even when no target was found.
+std::atomic<std::uint32_t> s_serializer_callbacks{0};
 // Read-only telemetry for the authenticated main-colors resource. All
 // counters are safe to sample from the developer worker without locking.
 std::atomic<std::uint32_t> s_targets{0};
+// Per-target observation captured BEFORE the engine's post-load work.
+// These are counters only; never retain raw engine object addresses.
+std::atomic<std::uint32_t> s_last_target_styles{0};
+std::atomic<std::uint32_t> s_peak_target_styles{0};
+std::atomic<std::uint32_t> s_last_matched_properties{0};
 std::atomic<std::uint32_t> s_preflight_ready{0};
 std::atomic<std::uint32_t> s_preflight_no_styles{0};
 std::atomic<std::uint32_t> s_preflight_missing{0};
@@ -163,6 +170,10 @@ void handle_serializer(void* serializer) {
             if(!palette_guard.owns_lock())continue;
             const auto inspection=inspect_loaded_ink_palette(
                 read,object,path,s_palette);
+            s_last_target_styles.store(inspection.styles,std::memory_order_relaxed);
+            s_last_matched_properties.store(inspection.matched,std::memory_order_relaxed);
+            if(inspection.styles>s_peak_target_styles.load(std::memory_order_relaxed))
+                s_peak_target_styles.store(inspection.styles,std::memory_order_relaxed);
             if(inspection.eligible)++s_preflight_ready;
             else if(inspection.failure==InkLoadPatchStatus::NoStyles)
                 ++s_preflight_no_styles;
@@ -231,6 +242,7 @@ void __fastcall schedule_hook(std::uint64_t a,std::uint8_t b,std::uint64_t c,
     // Hook runs synchronously in the game's resource serializer scheduling
     // path, NOT on our Tab worker. Its objects are owned by the serializer.
     // Native edits happen before the engine schedules postload jobs.
+    if(s_enabled.load(std::memory_order_relaxed))++s_serializer_callbacks;
     if(captures && s_enabled.load(std::memory_order_relaxed) &&
        !s_guard.test_and_set(std::memory_order_acquire)) {
         try {
@@ -337,7 +349,7 @@ bool start_native_resource_stage(
                    "Up to 3 palette properties may change at load; no UI refresh.\n";
         else
             log<<"Experimental native Ink read-only preflight enabled. "
-                   "No native Ink color writes (hook installation still patches code); use status.\n";
+                   "No native Ink color writes (hook installation still patches code); automatic trace is DreamUI-load.log.\n";
         return true;
     }catch(...){
         log<<"Native Ink preview disabled after initialization exception\n";
@@ -408,7 +420,11 @@ std::string native_resource_stage_status() {
     return std::string("native stage=")+
            (s_enabled.load(std::memory_order_relaxed)?"enabled":"disabled")+
            (s_write_mode.load(std::memory_order_relaxed)?" mode=write":" mode=observe-only")+
+           " serializer_callbacks="+std::to_string(s_serializer_callbacks.load())+
            " candidates="+std::to_string(s_candidates.load())+
+           " last_target_styles="+std::to_string(s_last_target_styles.load())+
+           " peak_target_styles="+std::to_string(s_peak_target_styles.load())+
+           " last_matched_properties="+std::to_string(s_last_matched_properties.load())+
            " target_resources="+std::to_string(s_targets.load())+
            " preflight_ready="+std::to_string(s_preflight_ready.load())+
            " preflight_no_styles="+std::to_string(s_preflight_no_styles.load())+

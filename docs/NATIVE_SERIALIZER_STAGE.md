@@ -63,9 +63,11 @@ separately gated modes:
    This installs the experimental hook in **read-only observation** mode.
    It checks only strongly held `main_colors.inkstyle` resources using
    the same complete native Variant validation as the patcher, without
-   invoking a memory writer. Run `status` through the existing developer
-   command inbox to see `target_resources`, `preflight_ready`,
-   `preflight_no_styles`, `preflight_missing` and `preflight_rejected`.
+   invoking a memory writer. The native hook automatically writes `serializer_callbacks`,
+   `target_resources`, `last_target_styles`, `peak_target_styles`,
+   `preflight_ready`, `preflight_no_styles`, `preflight_missing` and
+   `preflight_rejected` to `dreamui/logs/DreamUI-load.log` as they change.
+   No Tab press or `commands.txt` command is needed.
 3. **Only when intentionally testing native mutation**, ALSO place
    `dreamui/dev/native-ink-write.enable` before game startup.
    This enables the pre-existing load-stage apply/restore intent path.
@@ -209,6 +211,8 @@ memory, resource identity, or a target HDRColor failed validation.
 `target_resources` counts only the exact `main_colors.inkstyle` resource,
 while `candidates` counts every type-validated inkStyleResource.
 
-Use a dedicated test installation, collect `dreamui/logs/DreamUI-dev.log`
-after running `status`, and leave `native-ink-write.enable` absent.
+Use a dedicated test installation. `DreamUI-load.log` is generated
+without manual input when the experimental hook is enabled; leave
+`native-ink-write.enable` absent. See
+[automatic native load trace](AUTOMATIC_LOAD_TRACE.md) for interpretation.
 No other mod framework or asset is bundled or required by DreamUI.
