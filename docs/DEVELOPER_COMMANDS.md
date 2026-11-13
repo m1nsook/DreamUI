@@ -96,3 +96,26 @@ must be cleared by a verified restore before changing themes.
 
 No HUD Painter, DreamTools editor, Codeware, redscript, RED4ext or ImGui
 dependency is introduced.
+
+## Read-only experimental native Ink preflight (source builds only)
+
+In a dedicated test installation, compile the ASI with
+`-DDREAMUI_EXPERIMENTAL_NATIVE_STAGE=ON`, and before launch create:
+
+`Cyberpunk 2077/dreamui/dev/native-ink-preview.enable`
+
+When a validated `.dream` is installed, this enables **read-only**
+serializer-stage checks. It does not write native colors. After launching,
+save `status` to `dreamui/dev/commands.txt` and inspect the returned
+`native stage=enabled mode=observe-only` counters in `DreamUI-dev.log`.
+A positive `preflight_ready` is an authenticated typed-color inspection,
+not proof of a rendered color change.
+
+An independent, additional marker `dreamui/dev/native-ink-write.enable`
+must exist before launch to permit actual color mutation. Do not create
+this marker for observation-only testing. `ink-apply` and `ink-restore`
+are refused in observe-only mode. The marker state is fixed at launch.
+
+**Caution:** Even the read-only mode installs an experimental native
+function hook. It can still crash the game if the callback ABI or
+lifecycle assumptions are wrong. It is unavailable in public alpha.8.
