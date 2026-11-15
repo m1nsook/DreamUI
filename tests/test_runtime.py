@@ -101,8 +101,8 @@ class RuntimeSourceTests(unittest.TestCase):
         # against repeating the near-black-on-gray contrast regression.
         source = self.read("MessageColors.reds")
         match = re.search(
-            r"func ReplySelected\\(\\) -> HDRColor \\{\\s*"
-            r"return HDRColor\\(([^)]*)\\);",
+            r"func ReplySelected\(\) -> HDRColor \{\s*"
+            r"return HDRColor\(([^)]*)\);",
             source)
         self.assertIsNotNone(match)
         channels = [float(value.strip()) for value in match.group(1).split(",")]
@@ -114,8 +114,8 @@ class RuntimeSourceTests(unittest.TestCase):
         source = self.read("MessageColors.reds")
         for role in ("SentText", "ReceivedText", "ReplyDefault"):
             match = re.search(
-                rf"func {role}\\(\\) -> HDRColor \\{{\\s*"
-                rf"return HDRColor\\(([^)]*)\\);",
+                rf"func {role}\(\) -> HDRColor \{{\s*"
+                rf"return HDRColor\(([^)]*)\);",
                 source)
             self.assertIsNotNone(match)
             channels = [float(value.strip()) for value in match.group(1).split(",")]
