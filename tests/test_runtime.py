@@ -61,6 +61,25 @@ class RuntimeSourceTests(unittest.TestCase):
         self.assertNotIn("MainColors.", runtime.split("private final func RebindMinimap", 1)[1])
         self.assertNotIn("DreamUIPalette.Resolve(", roles)
 
+    def test_dialogue_choice_uses_independent_color_roles(self):
+        source = self.read("DialogueColors.reds")
+        self.assertIn("@wrapMethod(DialogChoiceLogicController)", source)
+        self.assertIn("private final func UpdateColors()", source)
+        self.assertIn("wrappedMethod();", source)
+        for role in ("NormalOption", "SelectedOption", "QuestOption",
+                     "PossessedOption", "LockedOption", "OptionMarker"):
+            self.assertIn(f"func {role}()", source)
+            self.assertIn(f"DreamUIDialogueColors.{role}()", source)
+        self.assertIn("this.m_isPhoneLockActive", source)
+        self.assertIn("this.m_isSelected", source)
+        self.assertIn("gameinteractionsChoiceType.QuestImportant", source)
+        self.assertIn("gameinteractionsChoiceType.PossessedDialog", source)
+        self.assertIn("inkTextRef.SetTintColor(this.m_ActiveTextRef", source)
+        self.assertIn("inkTextRef.SetTintColor(this.m_tagTextRef", source)
+        self.assertIn("IsDefined(inkTextRef.Get(this.m_ActiveTextRef))", source)
+        self.assertNotIn("MainColors.", source)
+        self.assertNotIn("DialogChoiceLogicController.OnInitialize", source)
+
     def test_widget_binding_has_null_guards(self):
         bindings = self.read("WidgetBindings.reds")
         self.assertIn("if !IsDefined(widget)", bindings)
