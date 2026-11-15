@@ -11,6 +11,7 @@ A cohesive, single-theme visual overhaul for Cyberpunk 2077.
 - World map recolor
 - New menu backgrounds
 - Blur and vignette treatments
+- DreamUI typography, favoring existing in-game Blender font resources over Rajdhani where suitable; first release prioritizes Latin-script legibility
 - Custom main-menu music
 
 The goal is one integrated mod, not a general theme framework or user-facing preset creation system.
