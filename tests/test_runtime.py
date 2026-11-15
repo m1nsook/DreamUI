@@ -96,6 +96,31 @@ class RuntimeSourceTests(unittest.TestCase):
         self.assertIn("this.m_selectedState", source)
         self.assertNotIn("MainColors.", source)
 
+    def test_sms_selected_reply_cannot_return_to_dark_text(self):
+        # The vanilla selected reply bubble is a medium-gray surface. Guard
+        # against repeating the near-black-on-gray contrast regression.
+        source = self.read("MessageColors.reds")
+        match = re.search(
+            r"func ReplySelected\\(\\) -> HDRColor \\{\\s*"
+            r"return HDRColor\\(([^)]*)\\);",
+            source)
+        self.assertIsNotNone(match)
+        channels = [float(value.strip()) for value in match.group(1).split(",")]
+        self.assertEqual(len(channels), 4)
+        self.assertTrue(all(channel >= 0.90 for channel in channels[:3]))
+        self.assertEqual(channels[3], 1.0)
+
+    def test_sms_body_text_not_force_tinted_cyan(self):
+        source = self.read("MessageColors.reds")
+        for role in ("SentText", "ReceivedText", "ReplyDefault"):
+            match = re.search(
+                rf"func {role}\\(\\) -> HDRColor \\{{\\s*"
+                rf"return HDRColor\\(([^)]*)\\);",
+                source)
+            self.assertIsNotNone(match)
+            channels = [float(value.strip()) for value in match.group(1).split(",")]
+            self.assertTrue(all(channel >= 0.90 for channel in channels[:3]))
+
     def test_spoken_subtitles_have_separate_body_and_speaker_colors(self):
         source = self.read("SubtitleColors.reds")
         self.assertIn("@wrapMethod(SubtitleLineLogicController)", source)
