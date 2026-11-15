@@ -1,12 +1,12 @@
 # DreamUI
 
-A cohesive, single-theme visual overhaul for Cyberpunk 2077.
+A cohesive visual overhaul for Cyberpunk 2077, with one shared visual identity and selectable built-in accent palettes.
 
 **Status:** Project reboot — planning and source-layout stage. No installable build is available yet.
 
 ## Planned features
 
-- Unified HUD recolor
+- Unified HUD recolor with one DreamUI base palette and built-in accent choices (Amber Yellow default, Neon Pastel Pink, Arctic Cyan and Soft Lavender)
 - Minimap recolor
 - World map recolor
 - New menu backgrounds
@@ -14,7 +14,7 @@ A cohesive, single-theme visual overhaul for Cyberpunk 2077.
 - DreamUI typography, favoring existing in-game Blender font resources over Rajdhani where suitable; first release prioritizes Latin-script legibility
 - Custom main-menu music
 
-The goal is one integrated mod, not a general theme framework or user-facing preset creation system.
+The goal is one integrated mod with built-in accent presets, **not** a general theme framework or importable preset editor.
 
 ## Technical direction
 
@@ -26,7 +26,9 @@ The goal is one integrated mod, not a general theme framework or user-facing pre
 
 ## Planned runtime requirements
 
-The current minimal target is **RED4ext, Codeware, and redscript**. **ArchiveXL** remains conditional on how the final UI assets are implemented. Preset storage and editor settings will be removed, so **RedData, RedFileSystem, and Mod Settings** are not planned requirements. See [dependency audit](docs/DEPENDENCIES.md). This is not a tested install list yet.
+The current minimal target is **RED4ext, Codeware, and redscript**. **ArchiveXL** remains conditional on how the final UI assets are implemented. The file-based preset editor will be removed; built-in accents are planned as static data with a future native selection UI, so **RedData, RedFileSystem, and Mod Settings** are not planned requirements. See [dependency audit](docs/DEPENDENCIES.md). This is not a tested install list yet.
+
+See the [color architecture and accent concept](docs/COLORS.md).
 
 ## Discontinued approach
 
