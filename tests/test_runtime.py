@@ -16,11 +16,12 @@ class RuntimeSourceTests(unittest.TestCase):
 
     def test_palette_has_102_distinct_entries(self):
         palette = self.read("Palette.reds")
-        self.assertEqual(palette.count('if Equals(path, n"MainColors.'), 102)
         before, after = palette.split("if johnny {", 1)
         johnny, main = after.split("return null;", 1)
         extract = lambda s: re.findall(r'if Equals\(path, n"MainColors\.([^"]+)"\)', s)
+        self.assertEqual(len(extract(johnny)), 10)
         self.assertEqual(len(set(extract(johnny))), 10)
+        self.assertEqual(len(extract(main)), 92)
         self.assertEqual(len(set(extract(main))), 92)
         self.assertIn("return DreamUIAccent.Amber;", palette)
 
