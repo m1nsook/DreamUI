@@ -5,8 +5,8 @@ public class DreamUIStyleService extends ScriptableService {
   private cb func OnLoad() {
     GameInstance.GetCallbackSystem()
       .RegisterCallback(n"Resource/Loaded", this, n"OnStyleResourceLoaded")
-      .AddTarget(ResourceTarget.Path(r"base\gameplay\gui\common\main_colors.inkstyle"))
-      .AddTarget(ResourceTarget.Path(r"base\gameplay\gui\common\themes\main_colors_johnny.inkstyle"));
+      .AddTarget(ResourceTarget.Path(r"base\\gameplay\\gui\\common\\main_colors.inkstyle"))
+      .AddTarget(ResourceTarget.Path(r"base\\gameplay\\gui\\common\\themes\\main_colors_johnny.inkstyle"));
   }
 
   private cb func OnStyleResourceLoaded(event: ref<ResourceEvent>) -> Void {
@@ -14,7 +14,7 @@ public class DreamUIStyleService extends ScriptableService {
     if !IsDefined(resource) { return; };
     if Equals(ArraySize(resource.styles), 0) { return; };
 
-    let isJohnny: Bool = Equals(event.GetPath(), r"base\gameplay\gui\common\themes\main_colors_johnny.inkstyle");
+    let isJohnny: Bool = Equals(event.GetPath(), r"base\\gameplay\\gui\\common\\themes\\main_colors_johnny.inkstyle");
     if !isJohnny {
       this.RebindMinimap(resource);
     };
