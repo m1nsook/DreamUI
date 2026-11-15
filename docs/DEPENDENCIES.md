@@ -10,9 +10,9 @@ This is a design-stage dependency audit, not a claim that the reboot has a worki
 | Codeware | Required | Supplies the resource callbacks and scriptable-service support used by the recoloring, minimap, and world-map code paths |
 | redscript | Required | Compiles game scripting changes and UI method patches |
 | ArchiveXL | Conditional | May be needed for custom UI resources, localization, or extending assets; evaluate when rebuilding the actual menus and visual assets |
-| RedData | Remove | Existing use is in JSON preset serialization and deserialization; fixed theme does not need it |
+| RedData | Remove | Existing use is in JSON preset serialization and deserialization; built-in palettes will be compiled or packaged with the mod; runtime JSON preset IO is not planned |
 | RedFileSystem | Remove | Existing use is in JSON preset discovery, reading, writing, and deletion; fixed theme does not need it |
-| Mod Settings | Remove | User-facing configuration UI is outside the single-theme scope |
+| Mod Settings | Remove | No requirement for an external settings mod; a small native settings control for bundled accents is planned later |
 
 Framework requirements include transitive dependencies; for example, the retained native framework components require RED4ext. Release-specific minimum versions must be pinned and tested for the supported game build. We must not inherit a version requirement merely because it appeared in an earlier mod's description.
 
@@ -22,14 +22,14 @@ Framework requirements include transitive dependencies; for example, the retaine
 - Minimap recoloring uses a resource callback and style property references.
 - World-map handling uses material/environment resource callbacks.
 - File storage and JSON handling are concentrated in preset storage and editing.
-- The menu editor, preview controllers, color sliders, and preset-list components are unnecessary for DreamUI's single fixed theme.
+- The old menu editor, preview controllers, color sliders, and file-backed preset-list components are unnecessary; DreamUI will have only a small set of built-in accent IDs.
 - Mod Settings metadata belongs to optional user preference controls, not to the color application mechanism itself.
 - An existing ArchiveXL sidecar was used for localization associated with a mod menu. That alone does not establish ArchiveXL as required for the new recoloring core.
 
 ## Removal work before declaring dependency-free
 
-1. Implement a dedicated DreamUI theme data source without JSON parsing or file-system reads.
-2. Replace preset-switching and UI controllers with a single startup configuration.
+1. Implement a compiled DreamUI base palette and built-in accent variants without runtime JSON parsing or file-system reads.
+2. Replace the external preset editor with a default built-in accent; add native accent selection and persistence later, independently of JSON/file-system dependencies.
 3. Remove imports, types, and references to JSON/preset storage and editor events.
 4. Remove Mod Settings annotations and optional configuration classes where no longer used.
 5. Keep the resource callbacks needed for HUD, minimap, and world map.

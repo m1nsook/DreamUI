@@ -2,11 +2,11 @@
 
 ## Product
 
-DreamUI is a single, consistent Cyberpunk 2077 interface theme.
+DreamUI is a single, consistent Cyberpunk 2077 visual identity with several built-in selectable accent palettes.
 
 ### Visual workstreams
 
-1. Core HUD palette and status legibility
+1. Shared frost-inspired base palette, reserved gameplay semantics, and built-in accent presets
 2. Minimap and in-world navigation colors
 3. World map presentation and icon differentiation
 4. Menu backgrounds and treatments
@@ -25,10 +25,12 @@ DreamUI is a single, consistent Cyberpunk 2077 interface theme.
 
 ### 2. Recoloring
 
-- Implement the HUD theme.
+- Implement the stable base palette and default Amber accent for HUD styling.
+- Add built-in candidate accents (Neon Pastel Pink, Arctic Cyan, Soft Lavender) against explicit role mappings.
+- Keep user-facing preset import/export and file-based palette editing out of scope; add native accent selection later.
 - Extend minimap recoloring.
 - Extend world map recoloring.
-- Check contrast, readability, and state distinctions.
+- Check contrast, readability, and gameplay state distinctions when accent selection changes.
 
 ### 3. Menu and sound
 

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "state": "design-prototype",
+  "description": "DreamUI design reference; hex values are not yet validated as in-game HDR ink colors.",
+  "defaultAccent": "amber",
+  "base": {
+    "iceWhite": "#EBF0F2",
+    "silver": "#C9D2D9",
+    "frostGray": "#99ACB7",
+    "graphite": "#3F4A52",
+    "charcoal": "#1C242A",
+    "nearBlack": "#0B1014"
+  },
+  "accents": {
+    "amber": {
+      "displayName": "Amber Yellow",
+      "state": "default design",
+      "light": "#F6C56F",
+      "primary": "#E2A34B",
+      "dark": "#91652A"
+    },
+    "pink": {
+      "displayName": "Neon Pastel Pink",
+      "state": "design candidate",
+      "light": "#F2B4E2",
+      "primary": "#ED82C8",
+      "dark": "#9C4987"
+    },
+    "cyan": {
+      "displayName": "Arctic Cyan",
+      "state": "design candidate",
+      "light": "#A5ECF3",
+      "primary": "#64C9DC",
+      "dark": "#327A95"
+    },
+    "lavender": {
+      "displayName": "Soft Lavender",
+      "state": "design candidate",
+      "light": "#D9C5FF",
+      "primary": "#AB96E4",
+      "dark": "#6559A4"
+    }
+  },
+  "rules": {
+    "accentRoles": [
+      "focusedControl",
+      "selectedNavigation",
+      "interactiveHighlight",
+      "decorativeEdge",
+      "noncriticalMapHighlight"
+    ],
+    "reservedSemanticRoles": [
+      "hostileIndicator",
+      "criticalWarning",
+      "healthDanger",
+      "damageTypeIdentity",
+      "questMeaning",
+      "friendlyIdentification"
+    ],
+    "note": "Accent presets must never override reserved semantic colors."
+  }
+}
