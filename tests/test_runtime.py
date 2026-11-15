@@ -48,6 +48,19 @@ class RuntimeSourceTests(unittest.TestCase):
                     "MiniMapStyle.ExteriorWallColor", "MiniMapStyle.InteriorWallColor"):
             self.assertIn(key, runtime)
 
+    def test_minimap_colors_are_independent_of_main_colors(self):
+        runtime = self.read("Runtime.reds")
+        roles = self.read("ElementColors.reds")
+        self.assertNotIn("WithReference(", runtime)
+        self.assertIn("ToVariant(color)", runtime)
+        for role in ("MinimapRoad", "MinimapFloor",
+                     "MinimapExteriorWall", "MinimapInteriorWall"):
+            self.assertIn(f"DreamUIElementColors.{role}()", runtime)
+            self.assertIn(f"func {role}()", roles)
+        self.assertEqual(runtime.count("this.WithColor(property,"), 4)
+        self.assertNotIn("MainColors.", runtime.split("private final func RebindMinimap", 1)[1])
+        self.assertNotIn("DreamUIPalette.Resolve(", roles)
+
     def test_widget_binding_has_null_guards(self):
         bindings = self.read("WidgetBindings.reds")
         self.assertIn("if !IsDefined(widget)", bindings)
