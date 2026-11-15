@@ -106,6 +106,11 @@ class RuntimeSourceTests(unittest.TestCase):
         for widget in ("m_subtitleWidget", "m_speakerNameWidget",
                        "m_radioSubtitle", "m_radioSpeaker"):
             self.assertIn(f"inkTextRef.SetTintColor(this.{widget}", source)
+        self.assertIn("@wrapMethod(ChatterLineLogicController)", source)
+        self.assertIn("func AmbientChatter()", source)
+        self.assertIn("inkTextRef.SetTintColor(this.m_text_normal", source)
+        self.assertIn("inkTextRef.SetTintColor(this.m_text_wide", source)
+        self.assertEqual(source.count("wrappedMethod(lineData)"), 2)
         self.assertNotIn("SetFontSize(", source)
         self.assertNotIn("MainColors.", source)
 
