@@ -4,7 +4,7 @@ module DreamUI
 // MainColors entries used by the HUD, minimap, inventory or subtitles.
 public abstract class DreamUIDialogueColors {
   public static final func NormalOption() -> HDRColor {
-    return HDRColor(0.92, 0.94, 0.95, 1.0);
+    return HDRColor(0.78, 1.00, 0.94, 1.0);
   }
 
   public static final func SelectedOption() -> HDRColor {
@@ -17,7 +17,7 @@ public abstract class DreamUIDialogueColors {
   }
 
   public static final func PossessedOption() -> HDRColor {
-    return HDRColor(0.66, 0.90, 0.98, 1.0);
+    return HDRColor(0.81, 0.65, 1.10, 1.0);
   }
 
   public static final func LockedOption() -> HDRColor {
@@ -25,7 +25,7 @@ public abstract class DreamUIDialogueColors {
   }
 
   public static final func OptionMarker() -> HDRColor {
-    return HDRColor(0.62, 0.72, 0.78, 1.0);
+    return HDRColor(1.10, 0.84, 0.45, 1.0);
   }
 }
 

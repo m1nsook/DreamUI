@@ -80,6 +80,35 @@ class RuntimeSourceTests(unittest.TestCase):
         self.assertNotIn("MainColors.", source)
         self.assertNotIn("DialogChoiceLogicController.OnInitialize", source)
 
+    def test_sms_received_sent_and_replies_have_independent_colors(self):
+        source = self.read("MessageColors.reds")
+        self.assertIn("@wrapMethod(MessangerItemRenderer)", source)
+        self.assertIn("@wrapMethod(MessangerReplyItemRenderer)", source)
+        self.assertIn("func SetMessageView(", source)
+        self.assertIn("func AnimateSelection()", source)
+        self.assertEqual(source.count("wrappedMethod("), 2)
+        for role in ("ReceivedText", "SentText", "ReplyDefault",
+                     "ReplySelected", "ReplyQuest", "ReplyDisabled"):
+            self.assertIn(f"func {role}()", source)
+        self.assertIn("this.m_labelPathRef", source)
+        self.assertIn("MessageViewType.Received", source)
+        self.assertIn("this.m_isActive", source)
+        self.assertIn("this.m_selectedState", source)
+        self.assertNotIn("MainColors.", source)
+
+    def test_spoken_subtitles_have_separate_body_and_speaker_colors(self):
+        source = self.read("SubtitleColors.reds")
+        self.assertIn("@wrapMethod(SubtitleLineLogicController)", source)
+        self.assertIn("func SetLineData(const lineData: script_ref<scnDialogLineData>)", source)
+        self.assertIn("wrappedMethod(lineData)", source)
+        for role in ("SpokenText", "SpeakerName", "RadioText", "RadioSpeaker"):
+            self.assertIn(f"func {role}()", source)
+        for widget in ("m_subtitleWidget", "m_speakerNameWidget",
+                       "m_radioSubtitle", "m_radioSpeaker"):
+            self.assertIn(f"inkTextRef.SetTintColor(this.{widget}", source)
+        self.assertNotIn("SetFontSize(", source)
+        self.assertNotIn("MainColors.", source)
+
     def test_widget_binding_has_null_guards(self):
         bindings = self.read("WidgetBindings.reds")
         self.assertIn("if !IsDefined(widget)", bindings)
