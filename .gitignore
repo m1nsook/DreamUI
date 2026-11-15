@@ -1,8 +1,9 @@
-/build/
-/dist/
-/.vs/
+.DS_Store
+Thumbs.db
 __pycache__/
-*.pyc
-*.pdb
-*.obj
-*.asi
+*.py[cod]
+.vscode/
+.idea/
+build/
+dist/
+.cache/
