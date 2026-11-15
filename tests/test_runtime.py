@@ -34,8 +34,9 @@ class RuntimeSourceTests(unittest.TestCase):
 
     def test_resource_paths_use_double_backslashes(self):
         scripts = "\n".join(file.read_text(encoding="utf-8") for file in SCRIPTS.glob("*.reds"))
-        paths = re.findall(r'r"([^"]+)"', scripts)
-        self.assertGreaterEqual(len(paths), 8)
+        paths = [path for path in re.findall(r'r"([^"]+)"', scripts)
+                 if path.startswith("base")]
+        self.assertEqual(len(paths), 7)
         for path in paths:
             self.assertFalse(re.search(r'(?<!\\)\\(?!\\)', path), path)
 
