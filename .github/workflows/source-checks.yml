@@ -17,3 +17,13 @@ jobs:
           python-version: '3.12'
       - name: Run static source tests
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Package game scripts for branch testing
+        if: github.event_name == 'pull_request'
+        run: zip -q -r DreamUI-color-isolation-test.zip r6/scripts/DreamUI
+      - name: Upload test package
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: DreamUI-color-isolation-test
+          path: DreamUI-color-isolation-test.zip
+          if-no-files-found: error
