@@ -1,18 +1,19 @@
 # DreamUI
 
-Cyberpunk 2077 UI overhaul — first playable-script candidate.
+Cyberpunk 2077 UI overhaul — alpha.1 script integration candidate.
 
-## Current implementation (alpha.1 development)
+## Included so far
 
-- Frostline-based built-in HUD colors (92 main Ink properties, 10 Johnny properties)
-- Ice/graphite minimap style references
-- First world-map building, metro and grading recolor pass
-- Amber accent default; three alternate accent color sets exist in code but cannot be selected yet
+- 92 standard + 10 Johnny theme HDR colors derived from the Frostline base
+- Minimap style bindings
+- World-map building, metro, and grading recoloring using the common palette
+- XP bar and perk attribute tint bindings
+- Built-in Amber accent; Pink, Cyan, and Lavender definitions reserved for future native selection
 
-Install the `r6` folder into the Cyberpunk 2077 game directory. Requires **RED4ext, Codeware and redscript**. This first candidate has **no custom archive assets**, fonts, background changes or audio yet.
+Copy `r6/scripts/DreamUI` into the Cyberpunk 2077 installation's matching `r6/scripts` folder.
 
-**Not game-verified:** It has not been compiled against a local game installation or tested in Cyberpunk. Treat it as an experimental build. If redscript compilation fails, remove `r6/scripts/DreamUI` and send the compiler log. Do not install alongside another mod that modifies these same Ink resources without checking conflicts.
+**Runtime requirements (provisional):** RED4ext, Codeware, redscript. No additional mod editor, file-backed presets, or external settings UI.
 
-Future work: native accent selector, more extensive HUD and map patch coverage, menu visual changes, fonts, and audio.
+This source is **not game-verified or redscript-compiler-verified**. Treat it as a development candidate. Do not install it alongside other mods that modify the same Ink resources without checking conflicts. If script compilation fails, remove `r6/scripts/DreamUI` and capture the redscript compilation log.
 
-The discontinued native ASI project is not part of this source tree.
+Backgrounds, fonts, menu music, and native settings are not included yet.
