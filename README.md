@@ -1,39 +1,18 @@
 # DreamUI
 
-A cohesive visual overhaul for Cyberpunk 2077, with one shared visual identity and selectable built-in accent palettes.
+Cyberpunk 2077 UI overhaul — first playable-script candidate.
 
-**Status:** Project reboot — planning and source-layout stage. No installable build is available yet.
+## Current implementation (alpha.1 development)
 
-## Planned features
+- Frostline-based built-in HUD colors (92 main Ink properties, 10 Johnny properties)
+- Ice/graphite minimap style references
+- First world-map building, metro and grading recolor pass
+- Amber accent default; three alternate accent color sets exist in code but cannot be selected yet
 
-- Unified HUD recolor with one DreamUI base palette and built-in accent choices (Amber Yellow default, Neon Pastel Pink, Arctic Cyan and Soft Lavender)
-- Minimap recolor
-- World map recolor
-- New menu backgrounds
-- Blur and vignette treatments
-- DreamUI typography, favoring existing in-game Blender font resources over Rajdhani where suitable; first release prioritizes Latin-script legibility
-- Custom main-menu music
+Install the `r6` folder into the Cyberpunk 2077 game directory. Requires **RED4ext, Codeware and redscript**. This first candidate has **no custom archive assets**, fonts, background changes or audio yet.
 
-The goal is one integrated mod with built-in accent presets, **not** a general theme framework or importable preset editor.
+**Not game-verified:** It has not been compiled against a local game installation or tested in Cyberpunk. Treat it as an experimental build. If redscript compilation fails, remove `r6/scripts/DreamUI` and send the compiler log. Do not install alongside another mod that modifies these same Ink resources without checking conflicts.
 
-## Technical direction
+Future work: native accent selector, more extensive HUD and map patch coverage, menu visual changes, fonts, and audio.
 
-- Build upon a proven existing recoloring implementation, with appropriate permissions.
-- Reorganize and meaningfully extend the implementation to fit this project.
-- Use established game modding frameworks where appropriate.
-- Package the work as one clear installation, which may contain multiple game-supported file formats.
-- Test the new modifications, integrations, and final package.
-
-## Planned runtime requirements
-
-The current minimal target is **RED4ext, Codeware, and redscript**. **ArchiveXL** remains conditional on how the final UI assets are implemented. The file-based preset editor will be removed; built-in accents are planned as static data with a future native selection UI, so **RedData, RedFileSystem, and Mod Settings** are not planned requirements. See [dependency audit](docs/DEPENDENCIES.md). This is not a tested install list yet.
-
-See the [color architecture and accent concept](docs/COLORS.md).
-
-## Discontinued approach
-
-The previous custom ASI plugin, engine hooks, theme package format, native probing experiments, and associated tooling are no longer part of the project.
-
-## Status
-
-The repository will be populated incrementally as the reboot implementation is established.
+The discontinued native ASI project is not part of this source tree.
