@@ -41,7 +41,8 @@ public class DreamUIStyleService extends ScriptableService {
     ModLog(n"DreamUI", s"Colorized \(patched) properties (Johnny: \(isJohnny))");
   }
 
-  // Preserve a legible ice/graphite minimap via references to the same color style.
+  // The minimap uses local HDR values rather than global MainColors references.
+  // As a result, tuning dialogue/UI text colors cannot recolor these surfaces.
   private final func RebindMinimap(resource: ref<inkStyleResource>) -> Void {
     let index: Int32 = 0;
     while index < ArraySize(resource.styles) {
@@ -51,12 +52,13 @@ public class DreamUIStyleService extends ScriptableService {
 
         for property in minimap.properties {
           if Equals(property.propertyPath, n"MiniMapStyle.RoadColor") {
-            ArrayPush(mapped, this.WithReference(property, n"MainColors.DarkBlue"));
+            ArrayPush(mapped, this.WithColor(property, DreamUIElementColors.MinimapRoad()));
           } else if Equals(property.propertyPath, n"MiniMapStyle.FloorColor") {
-            ArrayPush(mapped, this.WithReference(property, n"MainColors.White"));
-          } else if Equals(property.propertyPath, n"MiniMapStyle.ExteriorWallColor") ||
-                    Equals(property.propertyPath, n"MiniMapStyle.InteriorWallColor") {
-            ArrayPush(mapped, this.WithReference(property, n"MainColors.Neutral"));
+            ArrayPush(mapped, this.WithColor(property, DreamUIElementColors.MinimapFloor()));
+          } else if Equals(property.propertyPath, n"MiniMapStyle.ExteriorWallColor") {
+            ArrayPush(mapped, this.WithColor(property, DreamUIElementColors.MinimapExteriorWall()));
+          } else if Equals(property.propertyPath, n"MiniMapStyle.InteriorWallColor") {
+            ArrayPush(mapped, this.WithColor(property, DreamUIElementColors.MinimapInteriorWall()));
           } else {
             ArrayPush(mapped, property);
           };
@@ -70,12 +72,10 @@ public class DreamUIStyleService extends ScriptableService {
     };
   }
 
-  private final func WithReference(property: inkStyleProperty, path: CName) -> inkStyleProperty {
+  private final func WithColor(property: inkStyleProperty, color: HDRColor) -> inkStyleProperty {
     let result: inkStyleProperty;
-    let reference: inkStylePropertyReference;
-    reference.referencedPath = path;
     result.propertyPath = property.propertyPath;
-    result.value = ToVariant(reference);
+    result.value = ToVariant(color);
     return result;
   }
 }
