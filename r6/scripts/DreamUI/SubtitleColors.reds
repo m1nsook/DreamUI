@@ -18,6 +18,10 @@ public abstract class DreamUISubtitleColors {
   public static final func RadioSpeaker() -> HDRColor {
     return HDRColor(0.98, 0.82, 0.56, 1.0);
   }
+
+  public static final func AmbientChatter() -> HDRColor {
+    return HDRColor(0.89, 0.98, 0.94, 1.0);
+  }
 }
 
 // This callback is used for authored cinematic and spoken lines (including
@@ -37,5 +41,18 @@ public func SetLineData(const lineData: script_ref<scnDialogLineData>) -> Void {
   };
   if IsDefined(inkTextRef.Get(this.m_radioSpeaker)) {
     inkTextRef.SetTintColor(this.m_radioSpeaker, DreamUISubtitleColors.RadioSpeaker());
+  };
+}
+
+// Overhead and projected incidental dialogue uses a separate Ink controller.
+@wrapMethod(ChatterLineLogicController)
+public func SetLineData(const lineData: script_ref<scnDialogLineData>) -> Void {
+  wrappedMethod(lineData);
+
+  if IsDefined(inkTextRef.Get(this.m_text_normal)) {
+    inkTextRef.SetTintColor(this.m_text_normal, DreamUISubtitleColors.AmbientChatter());
+  };
+  if IsDefined(inkTextRef.Get(this.m_text_wide)) {
+    inkTextRef.SetTintColor(this.m_text_wide, DreamUISubtitleColors.AmbientChatter());
   };
 }
